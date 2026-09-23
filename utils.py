@@ -21,8 +21,11 @@ RENAME = {
     "endring_fyllingsgrad": "filling_degree_change",
 }
 
-# Måleverdiene som er meningsfulle å vise i tabell og plott
+# Alle tallkolonner, som kan velges og vises i plottet
 MEASURE_COLS = [
+    "area_number",
+    "iso_year",
+    "iso_week",
     "filling_degree",
     "capacity_TWh",
     "filling_TWh",
@@ -32,6 +35,9 @@ MEASURE_COLS = [
 
 # Enhet for hver måleverdi, brukes som aksetittel i plottene
 UNITS = {
+    "area_number": "Area number",
+    "iso_year": "ISO year",
+    "iso_week": "ISO week",
     "filling_degree": "Filling degree (share, 0-1)",
     "capacity_TWh": "Capacity (TWh)",
     "filling_TWh": "Stored energy (TWh)",

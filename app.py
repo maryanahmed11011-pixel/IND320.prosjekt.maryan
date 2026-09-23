@@ -1,27 +1,33 @@
-"""Hjemmeside for IND320-appen.
+"""Startpunkt for IND320-appen (denne filen kjøres av Streamlit).
 
-Streamlit lager sidemenyen automatisk: app.py blir hjemmesiden,
-og hver .py-fil i mappen pages/ blir en egen side i menyen.
+app.py fungerer som "ruter": den bygger sidemenyen med st.navigation
+og kjører siden brukeren har valgt. Selve innholdet ligger i egne filer:
+  - home.py                 : forside
+  - pages/1_Data_Table.py   : tabell med minigrafer
+  - pages/2_Plot.py         : interaktivt plott
+  - pages/3_Future_Work.py  : plassholder for senere deler
 """
 import streamlit as st
 
-# Sideoppsett må stå før alt annet Streamlit-innhold
-st.set_page_config(page_title="IND320 Reservoirs", page_icon="💧", layout="wide")
-
-st.title("💧 Norwegian Water Reservoirs")
-st.subheader("IND320 – Compulsory work 1")
-
-st.markdown(
-    """
-This app shows weekly filling levels for Norwegian hydropower reservoirs
-(national total, 1995 until today), read from `data/reservoirs.csv`.
-
-**Use the sidebar menu on the left to navigate:**
-- **Data Table** – one row per data column, with a mini line chart of the first month
-- **Plot** – interactive plot with column selection and month range
-- **Future Work** – placeholder for later parts of the project
-
-**Links**
-- GitHub repository: https://github.com/maryanahmed11011-pixel/IND320.prosjekt.maryan
-"""
+# Felles oppsett for alle sider. initial_sidebar_state="expanded" sørger for
+# at sidemenyen alltid er synlig når appen åpnes.
+st.set_page_config(
+    page_title="IND320 Reservoirs",
+    page_icon="💧",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
+
+# Sidene i menyen, med tydelige navn og ikoner
+pages = [
+    st.Page("home.py", title="Home", icon="🏠", default=True),
+    st.Page("pages/1_Data_Table.py", title="Data Table", icon="📊"),
+    st.Page("pages/2_Plot.py", title="Plot", icon="📈"),
+    st.Page("pages/3_Future_Work.py", title="Future Work", icon="⚙️"),
+]
+
+# Kort informasjon nederst i sidemenyen, synlig på alle sider
+st.sidebar.caption("IND320 – Compulsory work 1\n\nData: data/reservoirs.csv")
+
+# Lag menyen og kjør valgt side
+st.navigation(pages).run()
