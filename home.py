@@ -9,7 +9,7 @@ from utils import load_data  # felles innlesing med caching
 df = load_data()
 
 # ---------- Toppseksjon ----------
-st.title("💧 Norway's Water Battery")
+st.title(" Norway's Water Battery")
 st.markdown(
     "Around 90 % of Norway's electricity comes from hydropower. The water stored in the "
     "reservoirs works like a giant **battery**: it fills up with snowmelt in spring and summer, "
@@ -35,17 +35,17 @@ c1.metric(
     f"{latest['filling_degree_change'] * 100:+.1f} pp since last week",
 )
 c2.metric(
-    "Stored energy",
+    f"Stored energy (capacity {latest['capacity_TWh']:.1f} TWh)",
     f"{latest['filling_TWh']:.1f} TWh",
-    f"of {latest['capacity_TWh']:.1f} TWh capacity",
-    delta_color="off",
 )
 if not last_year.empty:
     diff = (latest["filling_degree"] - last_year["filling_degree"].iloc[0]) * 100
-    c3.metric("Compared to last year", f"{diff:+.1f} pp", "same week", delta_color="off")
+    c3.metric("vs. same week last year", f"{diff:+.1f} pp",
+              help="pp = percentage points")
 if week in median_by_week.index:
     diff = (latest["filling_degree"] - median_by_week[week]) * 100
-    c4.metric("Compared to normal", f"{diff:+.1f} pp", "vs. median since 1995", delta_color="off")
+    c4.metric("vs. normal (median since 1995)", f"{diff:+.1f} pp",
+              help="pp = percentage points")
 
 # ---------- Sesongplott: i år mot historien ----------
 st.subheader("🌊 This year compared to history")

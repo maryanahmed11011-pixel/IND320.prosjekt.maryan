@@ -67,9 +67,9 @@ fig.savefig(buf, format="png", dpi=150)
 st.image(buf)
 plt.close(fig)  # frigjør minne; Streamlit kjører skriptet på nytt ved hver endring
 
-if choice == ALL:
-    st.caption(
+st.caption(
         "All columns are scaled to 0–1 (min–max over the whole dataset) because they "
-        "have very different units. Constant columns (area_number, capacity_TWh) lie at 0."
+        "have very different units. Some lines overlap: filling_degree lies behind "
+        "filling_TWh (capacity is constant), and constant columns lie at 0."
     )
 st.caption("Source: data/reservoirs.csv (national total, area type 'NO').")
