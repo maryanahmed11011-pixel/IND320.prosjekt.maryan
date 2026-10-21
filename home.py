@@ -6,7 +6,7 @@ import streamlit as st
 
 from utils import load_data  # felles innlesing med caching
 
-df = load_data()
+df = load_data("NO")  # totalen for hele Norge, hentet fra NVE-API-et
 
 # ---------- Toppseksjon ----------
 st.title(" Norway's Water Battery")
@@ -16,7 +16,7 @@ st.markdown(
     "and is drained through the winter when electricity demand is high. "
     "This app explores weekly reservoir data from **1995 until today**."
 )
-st.caption("IND320 – Compulsory work 1 · Data: data/reservoirs.csv (national total)")
+st.caption("IND320 – Compulsory work 2 · Data: NVE Magasinstatistikk API (national total)")
 
 # ---------- Nøkkeltall for siste uke ----------
 latest = df.iloc[-1]  # dataene er sortert etter dato, så siste rad er nyeste uke
@@ -88,14 +88,14 @@ r2.error(f"**Lowest:** {lo['filling_degree'] * 100:.1f} % in week {int(lo['iso_w
 st.subheader("🧭 Explore the data")
 p1, p2, p3 = st.columns(3)
 with p1.container(border=True):
-    st.markdown("**Data Table**  \nOne row per column, with mini charts of the first month.")
+    st.markdown("**Data Table**  \nOne row per area, with mini charts of the first month.")
     st.page_link("pages/1_Data_Table.py", label="Open table", icon="📊")
 with p2.container(border=True):
-    st.markdown("**Plot**  \nChoose columns and months in an interactive plot.")
+    st.markdown("**Plot**  \nChoose area type, column and period in an interactive plot.")
     st.page_link("pages/2_Plot.py", label="Open plot", icon="📈")
 with p3.container(border=True):
-    st.markdown("**Future Work**  \nWhat comes next: MongoDB and more.")
-    st.page_link("pages/3_Future_Work.py", label="Open page", icon="⚙️")
+    st.markdown("**Cross-border Flows**  \nElectricity in and out of Norway, from MongoDB.")
+    st.page_link("pages/4_Cross_Border.py", label="Open page", icon="🔌")
 
 # ---------- Lenker ----------
 st.divider()
