@@ -1,20 +1,24 @@
-"""Felles hjelpefunksjoner for alle sidene i Streamlit-appen.
+"""Shared helper functions for all pages in the Streamlit app.
 
-Data hentes bare ett sted, slik at alle sider bruker samme innlesing,
-samme engelske kolonnenavn og samme caching.
+Data is loaded in one place only, so all pages use the same loading code,
+the same English column names and the same caching.
 
-Del 2: CSV-filen er erstattet med en direkte tilkobling til NVEs
-Magasinstatistikk-API, og strømflyt over landegrensene leses fra MongoDB.
+Part 2: the CSV file was replaced by a direct connection to NVE's
+Magasinstatistikk API, and cross-border flows are read from MongoDB.
+Part 3: weather data from open-meteo (ERA5) and the sampled locations
+(stored in MongoDB by the notebook) for price areas and VASS areas.
 """
 import pandas as pd
 import requests
 import streamlit as st
 from pymongo import MongoClient
 
-# Adresse til NVEs åpne Magasinstatistikk-API (krever ingen nøkkel)
+from analysis import HOURLY_VARS, download_era5
+
+# NVE's open Magasinstatistikk API (no key needed)
 API_URL = "https://biapi.nve.no/magasinstatistikk/api/Magasinstatistikk/HentOffentligData"
 
-# Oversettelse fra originale (norske) kolonnenavn til engelske, forklarende navn
+# Original (Norwegian) column names -> English, descriptive names
 RENAME = {
     "dato_Id": "date",
     "omrType": "area_type",
@@ -29,8 +33,8 @@ RENAME = {
     "endring_fyllingsgrad": "filling_degree_change",
 }
 
-# Måleverdier som kan velges i plottene. area_number, iso_year og iso_week er
-# ikke med lenger: områdenummeret vises nå som egne linjer, og år/uke er tid.
+# Measures that can be selected in the plots. area_number, iso_year and
+# iso_week are not included: areas are shown as lines and year/week is time.
 MEASURE_COLS = [
     "filling_degree",
     "capacity_TWh",
@@ -39,7 +43,7 @@ MEASURE_COLS = [
     "filling_degree_change",
 ]
 
-# Enhet for hver måleverdi, brukes som aksetittel i plottene
+# Unit for each measure, used as axis label in the plots
 UNITS = {
     "filling_degree": "Filling degree (share, 0-1)",
     "capacity_TWh": "Capacity (TWh)",
@@ -48,65 +52,14 @@ UNITS = {
     "filling_degree_change": "Weekly change in filling degree",
 }
 
-# De tre områdetypene i API-et, med forklaring til radioknappene
+# The three area types in the API, with labels for the radio buttons
 AREA_TYPES = {
     "NO": "NO – whole of Norway",
     "EL": "EL – price areas NO1–NO5",
     "VASS": "VASS – river system regions 1–3",
 }
 
-
-def area_label(area_type: str, number: int) -> str:
-    """Leselig navn på et område, f.eks. 'NO2' eller 'VASS3'."""
-    if area_type == "NO":
-        return "Norway"
-    if area_type == "EL":
-        return f"NO{number}"
-    return f"VASS{number}"
-
-
-@st.cache_data(ttl=3600)  # API-et kalles høyst én gang i timen; ellers brukes cache
-def fetch_reservoirs() -> pd.DataFrame:
-    """Henter all magasinstatistikk fra NVE-API-et og gir kolonnene engelske navn."""
-    response = requests.get(API_URL, timeout=30)
-    response.raise_for_status()
-    df = pd.DataFrame(response.json()).rename(columns=RENAME)
-    df["date"] = pd.to_datetime(df["date"])
-    # Månedskolonne (f.eks. "1995-01") brukes til å velge perioder i appen
-    df["month"] = df["date"].dt.to_period("M").astype(str)
-    return df
-
-
-def load_data(area_type: str = "NO", start_month: str | None = None,
-              end_month: str | None = None) -> pd.DataFrame:
-    """Data for én områdetype (NO, EL eller VASS), eventuelt bare for en periode.
-
-    Resultatet er sortert etter område og dato. Uten periode returneres alt.
-    """
-    df = fetch_reservoirs()
-    df = df[df["area_type"] == area_type]
-    if start_month is not None and end_month is not None:
-        # Månedene har formatet "ÅÅÅÅ-MM", så tekstsammenligning gir riktig rekkefølge
-        df = df[(df["month"] >= start_month) & (df["month"] <= end_month)]
-    return df.sort_values(["area_number", "date"]).reset_index(drop=True)
-
-
-@st.cache_data(ttl=3600)
-def load_flows() -> pd.DataFrame:
-    """Daglig strømflyt over landegrensene, lagret i MongoDB fra Jupyter Notebook.
-
-    Tilkoblingsstrengen leses fra st.secrets (lokalt: .streamlit/secrets.toml,
-    på streamlit.io: Secrets i appens innstillinger), så den aldri havner på GitHub.
-    """
-    client = MongoClient(st.secrets["mongo"]["uri"])
-    docs = list(client["ind320"]["flows_daily"].find({}, {"_id": 0}))
-    df = pd.DataFrame(docs)
-    df["date"] = pd.to_datetime(df["date"])
-    return df.sort_values(["connection", "direction", "date"]).reset_index(drop=True)
-# ---------- Part 3: weather data ----------
-from analysis import HOURLY_VARS, download_era5
-
-# Areas in the global selector: price areas and VASS areas
+# Areas in the global selector (app.py): price areas and VASS areas
 AREAS = {
     "NO1": "NO1 – East (price area)",
     "NO2": "NO2 – South-west (price area)",
@@ -118,10 +71,82 @@ AREAS = {
     "VASS3": "VASS3 – North (precipitation area)",
 }
 
+
+def area_label(area_type: str, number: int) -> str:
+    """Readable name of an area, e.g. 'NO2' or 'VASS3'."""
+    if area_type == "NO":
+        return "Norway"
+    if area_type == "EL":
+        return f"NO{number}"
+    return f"VASS{number}"
+
+
+def mongo_db():
+    """MongoDB database for the app.
+
+    The connection string is read from st.secrets (locally:
+    .streamlit/secrets.toml, on streamlit.io: Secrets in the app settings),
+    so it never ends up on GitHub.
+    """
+    return MongoClient(st.secrets["mongo"]["uri"])["ind320"]
+
+
+# ---------- Reservoir data (NVE API) ----------
+
+@st.cache_data(ttl=3600)  # the API is called at most once an hour
+def fetch_reservoirs() -> pd.DataFrame:
+    """Fetch all reservoir statistics from the NVE API, with English names."""
+    response = requests.get(API_URL, timeout=30)
+    response.raise_for_status()
+    df = pd.DataFrame(response.json()).rename(columns=RENAME)
+    df["date"] = pd.to_datetime(df["date"])
+    # Month column (e.g. "1995-01") used to select periods in the app
+    df["month"] = df["date"].dt.to_period("M").astype(str)
+    return df
+
+
+def load_data(area_type: str = "NO", start_month: str | None = None,
+              end_month: str | None = None) -> pd.DataFrame:
+    """Data for one area type (NO, EL or VASS), optionally for a period.
+
+    The result is sorted by area and date. Without a period, all data
+    is returned.
+    """
+    df = fetch_reservoirs()
+    df = df[df["area_type"] == area_type]
+    if start_month is not None and end_month is not None:
+        # Months have the format "YYYY-MM", so text comparison sorts correctly
+        df = df[(df["month"] >= start_month) & (df["month"] <= end_month)]
+    return df.sort_values(["area_number", "date"]).reset_index(drop=True)
+
+
+def filling_series(region: str) -> pd.Series:
+    """Weekly filling degree for one area, e.g. 'NO3' or 'VASS2'."""
+    area_type = "VASS" if region.startswith("VASS") else "EL"
+    df = load_data(area_type)
+    number = int(region[-1])
+    return (df[df["area_number"] == number]
+            .set_index("date")["filling_degree"].sort_index())
+
+
+# ---------- Cross-border flows (MongoDB) ----------
+
+@st.cache_data(ttl=3600)
+def load_flows() -> pd.DataFrame:
+    """Daily cross-border flows, stored in MongoDB from the notebook."""
+    docs = list(mongo_db()["flows_daily"].find({}, {"_id": 0}))
+    df = pd.DataFrame(docs)
+    df["date"] = pd.to_datetime(df["date"])
+    return df.sort_values(["connection", "direction", "date"]).reset_index(drop=True)
+
+
+# ---------- Weather data (open-meteo ERA5) ----------
+
 @st.cache_data
 def load_locations() -> pd.DataFrame:
-    """Random points per price area, sampled in the notebook."""
-    return pd.read_csv("locations.csv")
+    """Random points per area, sampled in the notebook and stored in MongoDB."""
+    docs = list(mongo_db()["locations"].find({}, {"_id": 0}))
+    return pd.DataFrame(docs)
 
 
 @st.cache_data(show_spinner="Downloading ERA5 weather data ...")
@@ -135,15 +160,8 @@ def load_weather(region: str, year: int,
     """
     locs = load_locations()
     locs = locs[locs["region"] == region]
+    if locs.empty:
+        raise ValueError(f"No sampled locations for {region} in MongoDB")
     df = download_era5(locs, f"{year}-01-01", f"{year}-12-31",
                        max_points=max_points)
     return df.groupby("time")[HOURLY_VARS].mean()
-
-
-def filling_series(region: str) -> pd.Series:
-    """Weekly filling degree for one area, e.g. 'NO3' or 'VASS2'."""
-    area_type = "VASS" if region.startswith("VASS") else "EL"
-    df = load_data(area_type)
-    number = int(region[-1])
-    return (df[df["area_number"] == number]
-            .set_index("date")["filling_degree"].sort_index())
