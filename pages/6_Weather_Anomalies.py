@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 
 from analysis import lof_anomalies, spc_outliers
-from utils import AREAS, load_locations, load_weather
+from utils import load_locations, load_weather
 
 LABELS = {
     "temperature_2m": "Temperature (°C)",

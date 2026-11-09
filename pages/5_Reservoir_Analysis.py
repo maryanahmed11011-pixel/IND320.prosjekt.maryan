@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 
 from analysis import plot_spectrogram, stl_decompose
-from utils import AREAS, filling_series
+from utils import filling_series
 
 area = st.session_state.get("price_area", "NO3")
 st.title(f"🔍 Reservoir analysis – {area}")

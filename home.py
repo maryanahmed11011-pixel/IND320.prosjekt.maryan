@@ -98,17 +98,17 @@ st.caption("Choose an area in the sidebar: it is used as the default on all page
 
 CARDS = [
     ("Data Table", "One row per area, with mini charts of the first month.",
-     "pages/1_Data_Table.py", "Open table", "📊"),
+     "pages/1_Data_Table.py", "Open", "📊"),
     ("Plot", "Compare areas over a chosen period in an interactive plot.",
-     "pages/2_Plot.py", "Open plot", "📈"),
+     "pages/2_Plot.py", "Open", "📈"),
     ("Reservoir Analysis", "Seasonal-trend decomposition (STL) and spectrogram "
      "of the filling degree.", "pages/5_Reservoir_Analysis.py",
-     "Open analysis", "🔍"),
+     "Open", "🔍"),
     ("Weather Anomalies", "Heavy rain and abrupt temperature changes found with "
      "SPC and LOF on ERA5 data.", "pages/6_Weather_Anomalies.py",
-     "Open weather", "🌦️"),
+     "Open", "🌦️"),
     ("Cross-border Flows", "Electricity in and out of Norway, from MongoDB.",
-     "pages/4_Cross_Border.py", "Open flows", "🔌"),
+     "pages/4_Cross_Border.py", "Open", "🔌"),
 ]
 cols = st.columns(len(CARDS))
 for col, (title, text, page, label, icon) in zip(cols, CARDS):
