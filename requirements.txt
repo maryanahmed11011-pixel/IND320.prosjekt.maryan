@@ -3,3 +3,6 @@ pandas>=2.0
 matplotlib>=3.7
 pymongo
 requests
+scipy
+scikit-learn
+statsmodels

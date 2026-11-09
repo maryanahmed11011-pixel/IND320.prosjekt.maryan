@@ -1,0 +1,9 @@
+# App-wide theme. The colours match theme.py, so widgets, sidebar and
+# plots share the same blue "water" palette.
+[theme]
+base = "light"
+primaryColor = "#3182bd"             # buttons, sliders, active tabs
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#eef4fa" # sidebar, input fields
+textColor = "#08306b"                # dark blue text
+font = "sans serif"

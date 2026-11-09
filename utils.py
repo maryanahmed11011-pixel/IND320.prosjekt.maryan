@@ -52,7 +52,7 @@ UNITS = {
 AREA_TYPES = {
     "NO": "NO – whole of Norway",
     "EL": "EL – price areas NO1–NO5",
-    "VASS": "VASS – river system regions 1–4",
+    "VASS": "VASS – river system regions 1–3",
 }
 
 
@@ -103,3 +103,47 @@ def load_flows() -> pd.DataFrame:
     df = pd.DataFrame(docs)
     df["date"] = pd.to_datetime(df["date"])
     return df.sort_values(["connection", "direction", "date"]).reset_index(drop=True)
+# ---------- Part 3: weather data ----------
+from analysis import HOURLY_VARS, download_era5
+
+# Areas in the global selector: price areas and VASS areas
+AREAS = {
+    "NO1": "NO1 – East (price area)",
+    "NO2": "NO2 – South-west (price area)",
+    "NO3": "NO3 – Central (price area)",
+    "NO4": "NO4 – North (price area)",
+    "NO5": "NO5 – West (price area)",
+    "VASS1": "VASS1 – East (precipitation area)",
+    "VASS2": "VASS2 – West (precipitation area)",
+    "VASS3": "VASS3 – North (precipitation area)",
+}
+
+@st.cache_data
+def load_locations() -> pd.DataFrame:
+    """Random points per price area, sampled in the notebook."""
+    return pd.read_csv("locations.csv")
+
+
+@st.cache_data(show_spinner="Downloading ERA5 weather data ...")
+def load_weather(region: str, year: int,
+                 max_points: int = 20) -> pd.DataFrame:
+    """Hourly ERA5 data averaged over the sampled points in a region.
+
+    max_points limits the number of ERA5 grid cells to stay within
+    open-meteo's free rate limits. Results are cached on the server,
+    so each region/year is only downloaded once.
+    """
+    locs = load_locations()
+    locs = locs[locs["region"] == region]
+    df = download_era5(locs, f"{year}-01-01", f"{year}-12-31",
+                       max_points=max_points)
+    return df.groupby("time")[HOURLY_VARS].mean()
+
+
+def filling_series(region: str) -> pd.Series:
+    """Weekly filling degree for one area, e.g. 'NO3' or 'VASS2'."""
+    area_type = "VASS" if region.startswith("VASS") else "EL"
+    df = load_data(area_type)
+    number = int(region[-1])
+    return (df[df["area_number"] == number]
+            .set_index("date")["filling_degree"].sort_index())
