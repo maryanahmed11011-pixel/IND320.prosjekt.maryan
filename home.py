@@ -112,7 +112,7 @@ CARDS = [
 ]
 cols = st.columns(len(CARDS))
 for col, (title, text, page, label, icon) in zip(cols, CARDS):
-        with col.container(border=True):
+    with col.container(border=True):
         st.markdown(f"**{title}**  \n{text}")
         st.page_link(page, label=label, icon=icon)
 
