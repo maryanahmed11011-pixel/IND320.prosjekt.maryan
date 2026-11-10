@@ -5,7 +5,9 @@ autumn 2026). The app combines weekly reservoir statistics from NVE,
 hourly ERA5 weather data from open-meteo and cross-border electricity
 flows from ENTSO-E (stored in MongoDB).
 
+
 - **App:** https://ind320prosjektmaryan-lmvbjxajmrnrqkykq8ivne.streamlit.app/
+- **Screencast (part 3):** https://github.com/maryanahmed11011-pixel/IND320-screencasts/blob/main/screencast_del3.mp4
 - **Notebooks:** `notebooks/ind320_compulsory_1.ipynb`, `_2.ipynb`, `_3.ipynb`
 
 ## Structure
