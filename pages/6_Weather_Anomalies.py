@@ -36,12 +36,18 @@ with top_left:
                "ERA5 grid cells per area (the notebook uses all of them), so "
                "the numbers differ slightly from the notebook.")
 with top_right:
-    # Map of the 1000 random sample points for the selected area
+    # Map of the 1000 random points, sampled from the NVE shapefiles in geo/
     locs = load_locations()
     st.map(locs[locs["region"] == area], latitude="lat", longitude="lon",
            size=800, color="#3182bd", height=220)
 
-weather = load_weather(area, year)
+try:
+    weather = load_weather(area, year)
+except Exception as err:  # e.g. rate limit (HTTP 429) from open-meteo
+    st.error("Could not download weather data from open-meteo. The free "
+             "API may be rate limited – please try again in a minute.\n\n"
+             f"Details: {err}")
+    st.stop()
 tab_spc, tab_lof = st.tabs(["Outliers (SPC)", "Anomalies (LOF)"])
 
 with tab_spc:

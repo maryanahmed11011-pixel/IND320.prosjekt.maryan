@@ -5,6 +5,7 @@ All plotting functions return matplotlib figures (shown with st.pyplot).
 Plot titles leave out the parameters, since the sliders show them.
 """
 import time
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,6 +19,82 @@ from statsmodels.tsa.seasonal import STL
 from theme import COLORS  # shared palette (also applies the plot style)
 
 ERA5_URL = "https://archive-api.open-meteo.com/v1/archive"
+
+
+# ---------- Areas from NVE shapefiles (geo/ folder in the repo) ----------
+# Downloaded from atlas.nve.no (Kartlag > Vis tabell > Eksporter til
+# shapefil) and committed to the repository, so the notebook and the app
+# read the same files and do not depend on NVE's map services.
+
+# NVE regions mapped to the VASS areas in Magasinstatistikk
+# (East = RØ + RS, West = RV, North = RM + RN, as in the assignment)
+REGION_TO_VASS = {
+    "RØ": "VASS1", "RS": "VASS1",
+    "RV": "VASS2",
+    "RM": "VASS3", "RN": "VASS3",
+}
+
+
+def _read_shapefile(folder):
+    """Read the (single) shapefile in a folder, returned in WGS84."""
+    import geopandas as gpd  # only needed here, so imported lazily
+
+    files = sorted(Path(folder).rglob("*.shp"))
+    if not files:
+        raise FileNotFoundError(f"No .shp file found in {folder}")
+    gdf = gpd.read_file(files[0])
+    if gdf.crs is None:            # NVE exports use UTM 33N
+        gdf = gdf.set_crs(epsg=25833)
+    return gdf.to_crs(epsg=4326)
+
+
+def _column(gdf, name):
+    """Find a column by name, ignoring upper/lower case."""
+    for col in gdf.columns:
+        if col.lower() == name.lower():
+            return gdf[col]
+    raise KeyError(f"Column '{name}' not found, got {list(gdf.columns)}")
+
+
+def load_areas(geo_dir="geo"):
+    """Price areas (NO1–NO5) and VASS areas (VASS1–3) as one GeoDataFrame.
+
+    Returns columns region and geometry, with one or more polygons per
+    region (RØ + RS and RM + RN are merged later, when sampling).
+    """
+    geo_dir = Path(geo_dir)
+
+    price = _read_shapefile(geo_dir / "budomrader")
+    # Names come as "NO 1" ... -> "NO1"
+    price["region"] = _column(price, "budomr").astype(str).str.replace(
+        " ", "", regex=False)
+
+    nve = _read_shapefile(geo_dir / "nve_region")
+    nve["region"] = _column(nve, "REGION").map(REGION_TO_VASS)
+
+    areas = pd.concat([price[["region", "geometry"]],
+                       nve[["region", "geometry"]]], ignore_index=True)
+    return areas.dropna(subset=["region"])
+
+
+def sample_locations(areas, n=1000, seed=42):
+    """Sample n random points inside each region -> region, lon, lat.
+
+    Sampling is done in a metric CRS (UTM 33N), so points are uniform per
+    km². Polygons are dissolved first, so RØ + RS and RM + RN become one
+    area each.
+    """
+    import geopandas as gpd
+
+    gdf_m = areas.dissolve(by="region").reset_index().to_crs(epsg=25833)
+    frames = []
+    for region, geom in zip(gdf_m["region"], gdf_m.geometry):
+        pts = gpd.GeoSeries([geom], crs=gdf_m.crs).sample_points(n, rng=seed)
+        pts = pts.explode(index_parts=False).to_crs(epsg=4326)
+        frames.append(pd.DataFrame(
+            {"region": region, "lon": pts.x.values, "lat": pts.y.values}
+        ))
+    return pd.concat(frames, ignore_index=True)
 HOURLY_VARS = ["temperature_2m", "precipitation",
                "wind_speed_10m", "relative_humidity_2m"]
 
@@ -39,7 +116,8 @@ def _get_with_retry(params, retries=5):
     for attempt in range(retries):
         r = requests.get(ERA5_URL, params=params, timeout=120)
         if r.status_code == 429:
-            time.sleep(60 * (attempt + 1))
+            if attempt < retries - 1:   # no point waiting after the last try
+                time.sleep(60 * (attempt + 1))
             continue
         r.raise_for_status()
         return r.json()
@@ -47,7 +125,7 @@ def _get_with_retry(params, retries=5):
 
 
 def download_era5(locations, start, end, hourly=HOURLY_VARS,
-                  batch_size=50, max_points=None, seed=42):
+                  batch_size=50, max_points=None, seed=42, retries=5):
     """Download hourly ERA5 data for a set of locations (columns lat, lon).
 
     Returns a long DataFrame: one row per location and hour.
@@ -67,7 +145,7 @@ def download_era5(locations, start, end, hourly=HOURLY_VARS,
             "start_date": start, "end_date": end,
             "hourly": ",".join(hourly), "models": "era5",
             "timezone": "GMT",
-        })
+        }, retries=retries)
         data = [data] if isinstance(data, dict) else data
         for j, loc in enumerate(data):
             df = pd.DataFrame(loc["hourly"])

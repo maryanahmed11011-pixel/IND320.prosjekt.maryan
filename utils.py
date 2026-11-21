@@ -5,15 +5,21 @@ the same English column names and the same caching.
 
 Part 2: the CSV file was replaced by a direct connection to NVE's
 Magasinstatistikk API, and cross-border flows are read from MongoDB.
-Part 3: weather data from open-meteo (ERA5) and the sampled locations
-(stored in MongoDB by the notebook) for price areas and VASS areas.
+Part 3: weather data from open-meteo (ERA5) for price areas and VASS
+areas. The areas are read from the NVE shapefiles in the geo/ folder of
+the repository, and 1000 random points are sampled per area.
 """
+from pathlib import Path
+
 import pandas as pd
 import requests
 import streamlit as st
 from pymongo import MongoClient
 
-from analysis import HOURLY_VARS, download_era5
+from analysis import HOURLY_VARS, download_era5, load_areas, sample_locations
+
+# geo/ folder next to this file, so the path works locally and on streamlit.io
+GEO_DIR = Path(__file__).resolve().parent / "geo"
 
 # NVE's open Magasinstatistikk API (no key needed)
 API_URL = "https://biapi.nve.no/magasinstatistikk/api/Magasinstatistikk/HentOffentligData"
@@ -142,11 +148,13 @@ def load_flows() -> pd.DataFrame:
 
 # ---------- Weather data (open-meteo ERA5) ----------
 
-@st.cache_data
+@st.cache_data(show_spinner="Sampling points in the NVE areas ...")
 def load_locations() -> pd.DataFrame:
-    """Random points per area, sampled in the notebook and stored in MongoDB."""
-    docs = list(mongo_db()["locations"].find({}, {"_id": 0}))
-    return pd.DataFrame(docs)
+    """1000 random points per area, sampled from the NVE shapefiles in geo/.
+
+    Same function and seed as in the notebook, so the points are the same.
+    """
+    return sample_locations(load_areas(GEO_DIR), n=1000, seed=42)
 
 
 @st.cache_data(show_spinner="Downloading ERA5 weather data ...")
@@ -161,7 +169,9 @@ def load_weather(region: str, year: int,
     locs = load_locations()
     locs = locs[locs["region"] == region]
     if locs.empty:
-        raise ValueError(f"No sampled locations for {region} in MongoDB")
+        raise ValueError(f"No sampled locations for {region}")
+    # Few retries in the app, so a rate limit gives an error message
+    # quickly instead of a page that spins for many minutes
     df = download_era5(locs, f"{year}-01-01", f"{year}-12-31",
-                       max_points=max_points)
+                       max_points=max_points, retries=2)
     return df.groupby("time")[HOURLY_VARS].mean()

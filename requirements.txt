@@ -6,3 +6,4 @@ requests
 scipy
 scikit-learn
 statsmodels
+geopandas>=1.0
