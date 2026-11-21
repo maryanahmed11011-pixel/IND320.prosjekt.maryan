@@ -4,7 +4,6 @@ The area comes from the global selector in the sidebar (app.py), the same
 one that controls the reservoir data. Weather data is downloaded
 automatically in the background and cached.
 """
-import matplotlib.pyplot as plt
 import streamlit as st
 
 from analysis import lof_anomalies, spc_outliers
@@ -53,13 +52,15 @@ tab_spc, tab_lof = st.tabs(["Outliers (SPC)", "Anomalies (LOF)"])
 with tab_spc:
     st.info(
         "**What you see:** the seasonal pattern is removed with a DCT "
-        "high-pass filter, and hours outside median ± n robust SDs are "
-        "marked red. For precipitation these are heavy-rain events, which "
-        "often last several hours. A larger cut-off keeps more slow variation "
-        "in the trend; more SDs give fewer outliers."
+        "high-pass filter, leaving the seasonally adjusted variations "
+        "(SATV). Hours outside median ± n robust SDs are marked red: for "
+        "temperature these are unusual warm or cold hours for the season, "
+        "for precipitation heavy-rain events. A larger cut-off keeps more "
+        "slow variation in the trend; more SDs give fewer outliers."
     )
     c1, c2, c3 = st.columns(3)
-    var = c1.selectbox("Variable", list(LABELS), index=1,
+    # Weather property selector, temperature is the default (index 0)
+    var = c1.selectbox("Weather property", list(LABELS), index=0,
                        format_func=LABELS.get, key="spc_var")
     cutoff = c2.slider("DCT cut-off (days)", 5, 120, 30)
     n_std = c3.slider("Number of robust SDs", 1.0, 6.0, 3.0, step=0.5)
@@ -67,8 +68,7 @@ with tab_spc:
     fig, summary, outliers = spc_outliers(
         weather[var], cutoff_days=cutoff, n_std=n_std, label=LABELS[var]
     )
-    st.pyplot(fig)
-    plt.close(fig)
+    st.plotly_chart(fig, theme=None)
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Outliers", summary["n_outliers"])
@@ -82,11 +82,13 @@ with tab_lof:
     st.info(
         "**What you see:** Local Outlier Factor compares each hour with its "
         "nearest neighbours in time and value. Red hours deviate clearly from "
-        "the surrounding days, e.g. sudden cold spells or warm spikes. The "
+        "the surrounding days, e.g. sudden cold spells, warm spikes or "
+        "unusual rain. The "
         "proportion sets how many hours are marked."
     )
     c1, c2, c3 = st.columns(3)
-    var = c1.selectbox("Variable", list(LABELS), index=0,
+    # Weather property selector, temperature is the default (index 0)
+    var = c1.selectbox("Weather property", list(LABELS), index=0,
                        format_func=LABELS.get, key="lof_var")
     contamination = c2.slider("Proportion of outliers", 0.001, 0.10,
                               0.01, step=0.001, format="%.3f")
@@ -96,8 +98,7 @@ with tab_lof:
         weather[var], contamination=contamination,
         n_neighbors=n_neighbors, label=LABELS[var]
     )
-    st.pyplot(fig)
-    plt.close(fig)
+    st.plotly_chart(fig, theme=None)
 
     m1, m2, m3 = st.columns(3)
     m1.metric("Anomalies", summary["n_anomalies"])

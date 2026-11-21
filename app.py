@@ -53,7 +53,7 @@ st.sidebar.selectbox(
 )
 
 st.sidebar.caption(
-    "IND320 – Compulsory work 3\n\n"
+    "IND320 – Compulsory work 4\n\n"
     "Data: NVE Magasinstatistikk API, ENTSO-E (via MongoDB) "
     "and open-meteo (ERA5)"
 )

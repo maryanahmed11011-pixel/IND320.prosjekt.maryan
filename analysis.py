@@ -1,22 +1,25 @@
 """Shared analysis functions used by the Streamlit app (part 3).
 
 The same methods are developed and documented in the Jupyter Notebook.
-All plotting functions return matplotlib figures (shown with st.pyplot).
+Part 4: all plotting functions return dynamic Plotly figures (shown with
+st.plotly_chart), styled by the "ind320" template in theme.py.
 Plot titles leave out the parameters, since the sliders show them.
 """
+import io
 import time
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 import requests
+from plotly.subplots import make_subplots
 from scipy.fft import dct, idct
 from scipy.signal import spectrogram
 from sklearn.neighbors import LocalOutlierFactor
 from statsmodels.tsa.seasonal import STL
 
-from theme import COLORS  # shared palette (also applies the plot style)
+from theme import COLORS  # shared palette (also registers the Plotly template)
 
 ERA5_URL = "https://archive-api.open-meteo.com/v1/archive"
 
@@ -162,6 +165,50 @@ def download_era5(locations, start, end, hourly=HOURLY_VARS,
     return pd.concat(frames, ignore_index=True)
 
 
+# ---------- Exchange rates from Norges Bank (part 4) ----------
+
+NB_URL = "https://data.norges-bank.no/api/data/EXR/{freq}.{currencies}.NOK.SP"
+
+
+def fetch_exchange_rates(currencies=("EUR", "USD"), start="2024-01-01",
+                         end=None, freq="B"):
+    """Exchange rates from Norges Bank's open data API (SDMX, no key).
+
+    currencies : currency codes, e.g. ("EUR", "USD")
+    start, end : dates as "YYYY-MM-DD" (end=None gives the newest data)
+    freq       : "B" = business days, "M" = monthly, "A" = annual averages
+    Returns a DataFrame with one column per currency, in NOK per unit of
+    the currency (e.g. EUR = 11.7 means 1 EUR costs 11.7 NOK), indexed by
+    date. Days without trading (weekends, holidays) are missing.
+    """
+    url = NB_URL.format(freq=freq, currencies="+".join(currencies))
+    params = {"format": "csv", "startPeriod": start, "locale": "en"}
+    if end:
+        params["endPeriod"] = end
+    r = requests.get(url, params=params, timeout=30)
+    r.raise_for_status()
+
+    # Let pandas detect the separator, so a change from ; to , is handled
+    raw = pd.read_csv(io.StringIO(r.text), sep=None, engine="python")
+    cols = {c.upper(): c for c in raw.columns}
+    missing = {"TIME_PERIOD", "BASE_CUR", "OBS_VALUE"} - set(cols)
+    if missing:
+        raise ValueError(f"Unexpected answer from Norges Bank, missing "
+                         f"{missing}. Columns: {list(raw.columns)}")
+
+    df = pd.DataFrame({
+        "date": pd.to_datetime(raw[cols["TIME_PERIOD"]]),
+        "currency": raw[cols["BASE_CUR"]],
+        "nok": pd.to_numeric(raw[cols["OBS_VALUE"]], errors="coerce"),
+    })
+    # Some currencies are quoted per 100 units (e.g. JPY): UNIT_MULT = 2
+    if "UNIT_MULT" in cols:
+        mult = pd.to_numeric(raw[cols["UNIT_MULT"]], errors="coerce").fillna(0)
+        df["nok"] = df["nok"] / 10 ** mult
+    return (df.pivot(index="date", columns="currency", values="nok")
+              .sort_index().rename_axis(columns=None))
+
+
 # ---------- Outliers: SPC on DCT high-pass filtered data ----------
 
 def spc_outliers(series, cutoff_days=30, n_std=3.0, label=None):
@@ -184,17 +231,19 @@ def spc_outliers(series, cutoff_days=30, n_std=3.0, label=None):
     lower = trend + med - n_std * robust_sd
     is_out = (x > upper) | (x < lower)
 
-    fig, ax = plt.subplots(figsize=(12, 4))
-    ax.plot(series.index, x, lw=0.6, color=BLUE, label="Data")
-    ax.plot(series.index, upper, "--", lw=1, color=GREY,
-            label=f"SPC limits (±{n_std} SD)")
-    ax.plot(series.index, lower, "--", lw=1, color=GREY)
-    ax.scatter(series.index[is_out], x[is_out], s=8, color=RED,
-               zorder=3, label="Outliers")
-    ax.set(ylabel=label, title=f"SPC outliers – {label}")
-    ax.grid(True, linestyle="--", alpha=0.4)
-    ax.legend(loc="upper right")
-    fig.tight_layout()
+    fig = go.Figure()
+    fig.add_scatter(x=series.index, y=x, mode="lines", name="Data",
+                    line=dict(color=BLUE, width=1))
+    fig.add_scatter(x=series.index, y=upper, mode="lines",
+                    name=f"SPC limits (±{n_std} SD)",
+                    line=dict(color=GREY, width=1, dash="dash"))
+    fig.add_scatter(x=series.index, y=lower, mode="lines", showlegend=False,
+                    name="Lower limit",
+                    line=dict(color=GREY, width=1, dash="dash"))
+    fig.add_scatter(x=series.index[is_out], y=x[is_out], mode="markers",
+                    name="Outliers", marker=dict(color=RED, size=5))
+    fig.update_layout(title=f"SPC outliers – {label}", yaxis_title=label,
+                      height=420, hovermode="closest")
 
     outliers = pd.DataFrame({"value": x[is_out], "lower": lower[is_out],
                              "upper": upper[is_out]},
@@ -226,14 +275,17 @@ def lof_anomalies(series, contamination=0.01, n_neighbors=20,
     is_anom = lof.fit_predict(features) == -1
     scores = -lof.negative_outlier_factor_
 
-    fig, ax = plt.subplots(figsize=(12, 4))
-    ax.plot(series.index, x, lw=0.6, color=BLUE, label="Data")
-    ax.scatter(series.index[is_anom], x[is_anom], s=10, color=RED,
-               zorder=3, label=f"LOF anomalies ({contamination:.1%})")
-    ax.set(ylabel=label, title=f"LOF anomalies – {label}")
-    ax.grid(True, linestyle="--", alpha=0.4)
-    ax.legend(loc="upper right")
-    fig.tight_layout()
+    fig = go.Figure()
+    fig.add_scatter(x=series.index, y=x, mode="lines", name="Data",
+                    line=dict(color=BLUE, width=1))
+    fig.add_scatter(x=series.index[is_anom], y=x[is_anom], mode="markers",
+                    name=f"LOF anomalies ({contamination:.1%})",
+                    marker=dict(color=RED, size=6),
+                    customdata=scores[is_anom],
+                    hovertemplate="%{x}<br>%{y:.2f}<br>"
+                                  "LOF score %{customdata:.2f}<extra></extra>")
+    fig.update_layout(title=f"LOF anomalies – {label}", yaxis_title=label,
+                      height=420, hovermode="closest")
 
     anomalies = pd.DataFrame({"value": x[is_anom],
                               "lof_score": scores[is_anom]},
@@ -251,36 +303,41 @@ def lof_anomalies(series, contamination=0.01, n_neighbors=20,
 
 def stl_decompose(series, period=52, seasonal=13, trend=105,
                   robust=False, label=None):
-    """STL decomposition of a weekly series. Returns a figure."""
+    """STL decomposition of a weekly series. Returns a Plotly figure."""
     fit = STL(series, period=period, seasonal=seasonal,
               trend=trend, robust=robust).fit()
 
-    fig, axes = plt.subplots(4, 1, figsize=(12, 6.5), sharex=True)
     parts = [(series, "Observed"), (fit.trend, "Trend"),
              (fit.seasonal, "Seasonal"), (fit.resid, "Residual")]
-    for ax, (data, name) in zip(axes, parts):
-        ax.plot(data.index, data, lw=0.8, color=BLUE)
-        ax.set_ylabel(name)
-        ax.grid(True, linestyle="--", alpha=0.4)
-    axes[0].set_title(f"STL – {label}")
-    fig.tight_layout()
+    # Four panels with a shared time axis (zooming one zooms all)
+    fig = make_subplots(rows=4, cols=1, shared_xaxes=True,
+                        vertical_spacing=0.03)
+    for row, (data, name) in enumerate(parts, start=1):
+        fig.add_scatter(x=data.index, y=data, mode="lines", name=name,
+                        line=dict(color=BLUE, width=1.2), row=row, col=1)
+        fig.update_yaxes(title_text=name, row=row, col=1)
+    fig.update_layout(title=f"STL – {label}", height=650, showlegend=False)
     return fig
 
 
 def plot_spectrogram(series, window_length=104, overlap=78,
                      max_freq=6, label=None):
-    """Spectrogram of a weekly series (cycles per year). Returns a figure."""
+    """Spectrogram of a weekly series (cycles per year). Returns a Plotly figure."""
     freqs, times, power = spectrogram(
         series.to_numpy(dtype=float), fs=52, nperseg=window_length,
         noverlap=overlap, detrend="constant",
     )
     dates = series.index[0] + pd.to_timedelta(times * 365.25, unit="D")
 
-    fig, ax = plt.subplots(figsize=(12, 4))
-    mesh = ax.pcolormesh(dates, freqs, 10 * np.log10(power + 1e-12),
-                         shading="auto", cmap="YlGnBu_r")  # blue palette
-    fig.colorbar(mesh, ax=ax, label="Power (dB)")
-    ax.set(ylabel="Frequency (cycles per year)", ylim=(0, max_freq),
-           title=f"Spectrogram – {label}")
-    fig.tight_layout()
+    keep = freqs <= max_freq  # only show the frequencies of interest
+    fig = go.Figure(go.Heatmap(
+        x=dates, y=freqs[keep], z=10 * np.log10(power[keep] + 1e-12),
+        colorscale="YlGnBu_r",  # blue palette, bright = strong cycle
+        colorbar=dict(title="Power (dB)"),
+        hovertemplate="%{x|%Y-%m}<br>%{y:.2f} cycles/year<br>"
+                      "%{z:.1f} dB<extra></extra>",
+    ))
+    fig.update_layout(title=f"Spectrogram – {label}",
+                      yaxis_title="Frequency (cycles per year)",
+                      height=420, hovermode="closest")
     return fig

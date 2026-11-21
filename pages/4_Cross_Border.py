@@ -5,12 +5,11 @@ selector in the sidebar (e.g. NO3 -> NO_3-SE_2).
 """
 import calendar
 
-import matplotlib.dates as mdates
-import matplotlib.pyplot as plt
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
-from theme import COLORS, DIRECTION_COLORS  # shared palette and plot style
+from theme import COLORS, DIRECTION_COLORS  # shared palette and Plotly template
 from utils import load_flows
 
 st.title("🔌 Cross-border Flows")
@@ -43,27 +42,24 @@ with left:
 
     # Donut chart in the shared palette: export blue, import dark blue,
     # white gaps between the slices and the total in the middle
-    fig, ax = plt.subplots(figsize=(5, 5))
-    ax.pie(
-        totals,
-        labels=[f"{d.capitalize()}\n{v:.2f} TWh" for d, v in totals.items()],
-        colors=[DIRECTION_COLORS.get(d, COLORS["neutral"]) for d in totals.index],
-        autopct="%1.0f%%", pctdistance=0.78, startangle=90, counterclock=False,
-        wedgeprops={"width": 0.42, "edgecolor": "white", "linewidth": 3},
-        textprops={"color": COLORS["dark"], "fontsize": 11},
+    fig = go.Figure(go.Pie(
+        labels=[d.capitalize() for d in totals.index], values=totals.values,
+        hole=0.42, sort=False, direction="clockwise", rotation=0,
+        marker=dict(colors=[DIRECTION_COLORS.get(d, COLORS["neutral"])
+                            for d in totals.index],
+                    line=dict(color="white", width=3)),
+        texttemplate="<b>%{percent:.0%}</b>",
+        textfont=dict(color="white", size=14),
+        hovertemplate="%{label}: %{value:.2f} TWh<extra></extra>",
+    ))
+    fig.update_layout(
+        title=f"{connection}, {year}", height=420, hovermode="closest",
+        annotations=[dict(text=f"<b>{totals.sum():.2f}</b><br>TWh total",
+                          showarrow=False, font=dict(size=16))],
+        legend=dict(orientation="h", y=-0.05, x=0.5, xanchor="center",
+                    yanchor="top"),
     )
-    # Percentages inside the ring in white, so they read on the colours
-    for text in ax.texts:
-        if text.get_text().endswith("%"):
-            text.set_color("white")
-            text.set_fontweight("bold")
-    ax.text(0, 0, f"{totals.sum():.2f}\nTWh total", ha="center", va="center",
-            fontsize=13, fontweight="bold", color=COLORS["dark"])
-    ax.set_title(f"{connection}, {year}")
-    ax.set_aspect("equal")
-    ax.axis("off")  # no grid or axes around the donut
-    st.pyplot(fig)
-    plt.close(fig)
+    st.plotly_chart(fig, theme=None)
 
 # ---------- Right: line plot for selected months ----------
 with right:
@@ -78,7 +74,7 @@ with right:
     if not months:
         st.info("Select at least one month.")
     else:
-        fig, ax = plt.subplots(figsize=(7, 5))
+        fig = go.Figure()
         # One line per direction. Days in months that are not selected are
         # set to NaN, so the line breaks instead of crossing the gap.
         all_days = pd.date_range(f"{year}-01-01", f"{year}-12-31", freq="D")
@@ -87,23 +83,25 @@ with right:
                       .reindex(all_days) / 1000)  # GWh
             series[~series.index.month.isin(months)] = float("nan")
             # Import is dashed, so the two blue lines are easy to tell apart
-            ax.plot(series.index, series, linewidth=1.4,
-                    linestyle="--" if direction == "import" else "-",
-                    color=DIRECTION_COLORS.get(direction, COLORS["neutral"]),
-                    label=direction.capitalize())
+            fig.add_scatter(
+                x=series.index, y=series, mode="lines",
+                name=direction.capitalize(), connectgaps=False,
+                line=dict(width=1.6,
+                          dash="dash" if direction == "import" else "solid",
+                          color=DIRECTION_COLORS.get(direction,
+                                                     COLORS["neutral"])),
+                hovertemplate="%{y:.1f} GWh",
+            )
 
         # Only show the range around the selected months
-        ax.set_xlim(pd.Timestamp(year, min(months), 1),
-                    pd.Timestamp(year, max(months), 1) + pd.offsets.MonthEnd(0))
-        locator = mdates.AutoDateLocator()
-        ax.xaxis.set_major_locator(locator)
-        ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
-        ax.set_ylabel("Energy per day (GWh)")
-        ax.set_title(f"{connection}, {year}")
-        ax.grid(True, alpha=0.4)
-        ax.legend()
-        st.pyplot(fig)
-        plt.close(fig)
+        fig.update_layout(
+            title=f"{connection}, {year}", height=420,
+            yaxis_title="Energy per day (GWh)",
+            xaxis_range=[pd.Timestamp(year, min(months), 1),
+                         pd.Timestamp(year, max(months), 1)
+                         + pd.offsets.MonthEnd(0)],
+        )
+        st.plotly_chart(fig, theme=None)
 
 # ---------- Source ----------
 with st.expander("About the data"):

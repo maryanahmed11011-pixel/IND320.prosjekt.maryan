@@ -2,7 +2,6 @@
 
 The area comes from the global selector in the sidebar (app.py).
 """
-import matplotlib.pyplot as plt
 import streamlit as st
 
 from analysis import plot_spectrogram, stl_decompose
@@ -33,8 +32,7 @@ with tab_stl:
 
     fig = stl_decompose(series, seasonal=seasonal, trend=trend,
                         robust=robust, label=f"Filling degree {area}")
-    st.pyplot(fig)
-    plt.close(fig)
+    st.plotly_chart(fig, theme=None)
 
 with tab_spec:
     st.info(
@@ -53,5 +51,4 @@ with tab_spec:
     fig = plot_spectrogram(series, window_length=window,
                            overlap=overlap, max_freq=max_freq,
                            label=f"Filling degree {area}")
-    st.pyplot(fig)
-    plt.close(fig)
+    st.plotly_chart(fig, theme=None)

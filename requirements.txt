@@ -7,3 +7,4 @@ scipy
 scikit-learn
 statsmodels
 geopandas>=1.0
+plotly>=5.20

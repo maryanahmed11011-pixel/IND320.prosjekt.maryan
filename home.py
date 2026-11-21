@@ -1,10 +1,8 @@
 """Front page: key figures, seasonal overview and shortcuts to all pages."""
-import io
-
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import streamlit as st
 
-from theme import COLORS  # shared palette (also applies the plot style)
+from theme import COLORS  # shared palette (also registers the Plotly template)
 from utils import load_data  # shared, cached data loading
 
 df = load_data("NO")  # national total from the NVE API
@@ -18,7 +16,7 @@ st.markdown(
     "This app explores weekly reservoir data from **1995 until today**, together with "
     "**hourly weather data** (ERA5) that explains how the reservoirs are filled."
 )
-st.caption("IND320 – Compulsory work 3 · Data: NVE Magasinstatistikk API, "
+st.caption("IND320 – Compulsory work 4 · Data: NVE Magasinstatistikk API, "
            "open-meteo (ERA5) and ENTSO-E (via MongoDB)")
 
 # ---------- Key figures for the latest week ----------
@@ -58,27 +56,31 @@ band = history.groupby("iso_week")["filling_degree"].agg(["min", "median", "max"
 this_year = df[df["iso_year"] == year]
 prev_year = df[df["iso_year"] == year - 1]
 
-fig, ax = plt.subplots(figsize=(10, 4), layout="constrained")
-ax.fill_between(band.index, band["min"], band["max"], color=COLORS["light"],
-                alpha=0.5,
-                label=f"Range {int(history['iso_year'].min())}–{year - 1}")
-ax.plot(band.index, band["median"], color=COLORS["primary"], linestyle="--",
-        label="Median")
-ax.plot(prev_year["iso_week"], prev_year["filling_degree"] * 100,
-        color=COLORS["neutral"], label=str(year - 1))
-ax.plot(this_year["iso_week"], this_year["filling_degree"] * 100,
-        color=COLORS["dark"], linewidth=2.5, label=str(year))
-ax.set_xlim(1, 53)
-ax.set_ylim(0, 100)
-ax.set_xlabel("Week number")
-ax.set_ylabel("Filling degree (%)")
-ax.legend(loc="lower right", fontsize=9)
-
-# Fixed image size (same method as on the plot page)
-buf = io.BytesIO()
-fig.savefig(buf, format="png", dpi=150)
-st.image(buf)
-plt.close(fig)
+fig = go.Figure()
+# Historical range as a filled band: the max line is filled down to the
+# min line ("tonexty"), so the band shows min-max for each week
+fig.add_scatter(x=band.index, y=band["min"], mode="lines",
+                line=dict(width=0), showlegend=False, hoverinfo="skip")
+fig.add_scatter(x=band.index, y=band["max"], mode="lines",
+                line=dict(width=0), fill="tonexty",
+                fillcolor="rgba(158, 202, 225, 0.5)",  # COLORS["light"]
+                name=f"Range {int(history['iso_year'].min())}–{year - 1}",
+                hoverinfo="skip")
+fig.add_scatter(x=band.index, y=band["median"], mode="lines", name="Median",
+                line=dict(color=COLORS["primary"], dash="dash"),
+                hovertemplate="%{y:.1f} %")
+fig.add_scatter(x=prev_year["iso_week"], y=prev_year["filling_degree"] * 100,
+                mode="lines", name=str(year - 1),
+                line=dict(color=COLORS["neutral"]),
+                hovertemplate="%{y:.1f} %")
+fig.add_scatter(x=this_year["iso_week"], y=this_year["filling_degree"] * 100,
+                mode="lines+markers", name=str(year),
+                line=dict(color=COLORS["dark"], width=3),
+                marker=dict(size=5), hovertemplate="%{y:.1f} %")
+fig.update_layout(xaxis=dict(title="Week number", range=[1, 53]),
+                  yaxis=dict(title="Filling degree (%)", range=[0, 100]),
+                  height=400, hovermode="x unified")
+st.plotly_chart(fig, theme=None)
 st.caption("The reservoirs are lowest around week 15–18 (April) and highest "
            "around week 40 (October).")
 
