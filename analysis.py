@@ -25,8 +25,8 @@ ERA5_URL = "https://archive-api.open-meteo.com/v1/archive"
 
 
 # ---------- Areas from NVE shapefiles (geo/ folder in the repo) ----------
-# Downloaded from atlas.nve.no (Kartlag > Vis tabell > Eksporter til
-# shapefil) and committed to the repository, so the notebook and the app
+# Downloaded from atlas.nve.no (the layer's table view, exported as a
+# shapefile) and committed to the repository, so the notebook and the app
 # read the same files and do not depend on NVE's map services.
 
 # NVE regions mapped to the VASS areas in Magasinstatistikk
