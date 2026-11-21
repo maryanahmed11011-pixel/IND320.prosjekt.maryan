@@ -177,14 +177,14 @@ def load_weather(region: str, year: int,
     locs = locs[locs["region"] == region]
     if locs.empty:
         raise ValueError(f"No sampled locations for {region}")
-    # Few retries in the app, so a rate limit gives an error message
-    # quickly instead of a page that spins for many minutes
     # ERA5 in open-meteo lags about five days behind today, so the end
     # date of the current year is moved back to the newest available day
     end = min(pd.Timestamp(f"{year}-12-31"),
               pd.Timestamp.today().normalize() - pd.Timedelta(days=6))
     if end < pd.Timestamp(f"{year}-01-01"):
         raise ValueError(f"No ERA5 data available yet for {year}")
+    # Few retries in the app, so a rate limit gives an error message
+    # quickly instead of a page that spins for many minutes
     df = download_era5(locs, f"{year}-01-01", f"{end:%Y-%m-%d}",
                        max_points=max_points, retries=2)
     return df.groupby("time")[HOURLY_VARS].mean()
@@ -201,6 +201,18 @@ def load_weather_weekly(region: str, year: int,
     area (max_points=5) to stay within open-meteo's free limits.
     """
     hourly = load_weather(region, year, max_points=max_points)
+    return daily_to_weekly(hourly_to_daily(hourly))
+
+
+@st.cache_data(show_spinner="Combining weekly weather data over the years ...")
+def load_weather_weekly_years(region: str, start_year: int, end_year: int,
+                              max_points: int = 5) -> pd.DataFrame:
+    """Weekly weather for a region over several years (correlation and
+    forecasting pages). The hourly data is combined before aggregating,
+    so the weeks at New Year are not split in two."""
+    hourly = pd.concat([load_weather(region, y, max_points=max_points)
+                        for y in range(start_year, end_year + 1)])
+    hourly = hourly[~hourly.index.duplicated()].sort_index()
     return daily_to_weekly(hourly_to_daily(hourly))
 
 

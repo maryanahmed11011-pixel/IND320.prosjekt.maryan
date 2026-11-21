@@ -299,6 +299,31 @@ def daily_to_weekly(df, agg=None):
     return df.resample("W-SUN").agg(agg)
 
 
+# ---------- Lagged and sliding window correlation (part 4) ----------
+# Same idea as in the lecture notebook (lagged_correlation_plot): the
+# explanatory series x is shifted forward by `lag` steps, so y(t) is
+# compared with x(t - lag), i.e. the weather `lag` weeks earlier.
+
+def lagged_correlation(y, x, lag=0):
+    """Pearson correlation between y(t) and x(t - lag) over the whole period."""
+    return y.corr(x.shift(lag))
+
+
+def correlation_by_lag(y, x, max_lag=26):
+    """Lagged correlation for lag = 0 ... max_lag (Series indexed by lag)."""
+    return pd.Series({lag: lagged_correlation(y, x, lag)
+                      for lag in range(max_lag + 1)}, name="correlation")
+
+
+def sliding_window_correlation(y, x, window=26, lag=0):
+    """Centred rolling correlation between y(t) and x(t - lag).
+
+    The value at time t uses the `window` steps around t, so a change in
+    the relationship shows up as a change in the curve over time.
+    """
+    return y.rolling(window, center=True).corr(x.shift(lag))
+
+
 # ---------- Outliers: SPC on DCT high-pass filtered data ----------
 
 def spc_outliers(series, cutoff_days=30, n_std=3.0, label=None):

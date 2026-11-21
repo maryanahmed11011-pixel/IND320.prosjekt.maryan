@@ -5,6 +5,7 @@ holds the global area selector, and runs the selected page. The content
 of each page lives in its own file:
   - home.py                        : front page with key figures
   - pages/7_Map.py                 : interactive map, click selects area (part 4)
+  - pages/8_Correlation.py         : sliding window correlation (part 4)
   - pages/1_Data_Table.py          : table with mini charts
   - pages/2_Plot.py                : interactive reservoir plot
   - pages/5_Reservoir_Analysis.py  : STL and spectrogram (part 3)
@@ -37,6 +38,8 @@ pages = {
     "Weather": [
         st.Page("pages/6_Weather_Anomalies.py",
                 title="Weather Anomalies", icon="🌦️"),
+        st.Page("pages/8_Correlation.py",
+                title="Weather vs. Reservoirs", icon="🔗"),
     ],
     "Power exchange": [
         st.Page("pages/4_Cross_Border.py",
