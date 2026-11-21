@@ -39,10 +39,17 @@ def _read_shapefile(folder):
     """Read the (single) shapefile in a folder, returned in WGS84."""
     import geopandas as gpd  # only needed here, so imported lazily
 
-    files = sorted(Path(folder).rglob("*.shp"))
+    folder = Path(folder)
+    # Match the folder name without caring about upper/lower case:
+    # Windows ignores case, but Linux (streamlit.io) does not
+    matches = [p for p in folder.parent.iterdir()
+               if p.is_dir() and p.name.lower() == folder.name.lower()]
+    files = sorted(matches[0].rglob("*.shp")) if matches else []
     if not files:
         raise FileNotFoundError(f"No .shp file found in {folder}")
-    gdf = gpd.read_file(files[0])
+    # The NVE export is UTF-8 but has no .cpg file, so the encoding is
+    # given explicitly (otherwise "RØ" is read wrongly and VASS1 loses RØ)
+    gdf = gpd.read_file(files[0], encoding="utf-8")
     if gdf.crs is None:            # NVE exports use UTM 33N
         gdf = gdf.set_crs(epsg=25833)
     return gdf.to_crs(epsg=4326)
