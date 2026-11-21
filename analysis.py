@@ -209,6 +209,62 @@ def fetch_exchange_rates(currencies=("EUR", "USD"), start="2024-01-01",
               .sort_index().rename_axis(columns=None))
 
 
+# ---------- Time alignment (part 4) ----------
+# The sources use different time conventions (see the part 4 notebook):
+#   ERA5 / open-meteo : hourly, UTC (requested with timezone=GMT)
+#   ENTSO-E (MongoDB) : daily sums over UTC days
+#   Norges Bank       : Norwegian business days, no time of day
+#   Magasinstatistikk : weekly, dated on the Sunday that ends the ISO week
+# Common reference: local Norwegian calendar days and ISO weeks ending on
+# Sunday, the same as Magasinstatistikk.
+
+LOCAL_TZ = "Europe/Oslo"
+
+# Precipitation is summed over a period, the other weather variables are
+# averaged
+WEATHER_AGG = {"precipitation": "sum"}
+
+
+def utc_to_local(df):
+    """Convert a naive UTC time index to Norwegian local time (tz-aware).
+
+    Handles summer time: the local day in late March has 23 hours and the
+    one in late October 25 hours.
+    """
+    out = df.copy()
+    out.index = pd.DatetimeIndex(out.index).tz_localize("UTC").tz_convert(LOCAL_TZ)
+    return out
+
+
+def hourly_to_daily(df, agg=None, min_hours=23):
+    """Aggregate hourly UTC data to local Norwegian calendar days.
+
+    agg       : {column: "sum" / "mean"}, default mean (sum for precipitation)
+    min_hours : days with fewer hours are dropped. This removes the partial
+                first/last day that appears when a UTC year is shifted to
+                local time (the summer-time day in March has 23 hours).
+    Returns a DataFrame indexed by naive local dates.
+    """
+    agg = {c: (agg or WEATHER_AGG).get(c, "mean") for c in df.columns}
+    local = utc_to_local(df)
+    daily = local.resample("D").agg(agg)
+    hours = local.iloc[:, 0].resample("D").count()
+    daily = daily[hours >= min_hours]
+    daily.index = daily.index.tz_localize(None)
+    return daily
+
+
+def daily_to_weekly(df, agg=None):
+    """Aggregate daily data to ISO weeks dated on Sunday (Magasinstatistikk).
+
+    Works for both calendar days (weather) and business days (exchange
+    rates: missing weekends and holidays are simply skipped).
+    """
+    agg = {c: (agg or WEATHER_AGG).get(c, "mean") for c in df.columns}
+    # "W-SUN": weeks ending on Sunday, labelled with that Sunday's date
+    return df.resample("W-SUN").agg(agg)
+
+
 # ---------- Outliers: SPC on DCT high-pass filtered data ----------
 
 def spc_outliers(series, cutoff_days=30, n_std=3.0, label=None):
