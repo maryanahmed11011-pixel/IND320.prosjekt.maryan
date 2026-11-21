@@ -6,6 +6,7 @@ st.plotly_chart), styled by the "ind320" template in theme.py.
 Plot titles leave out the parameters, since the sliders show them.
 """
 import io
+import json
 import time
 from pathlib import Path
 
@@ -110,6 +111,39 @@ HOURLY_VARS = ["temperature_2m", "precipitation",
 
 # Colours from the shared palette in theme.py
 BLUE, RED, GREY = COLORS["primary"], COLORS["alert"], COLORS["neutral"]
+
+
+def area_geojson(areas, layer, tolerance=0.01):
+    """GeoJSON (dict) for one area layer, for the map in the app (part 4).
+
+    layer     : "price" (NO1–NO5) or "water" (VASS1–3)
+    tolerance : simplification in degrees (~1 km), which makes the file
+                small enough for a fast web map without visible changes
+    Each feature has the properties region, lon and lat, where lon/lat is
+    a point inside the area (used for labels and clicks on the map).
+    """
+    prefix = "NO" if layer == "price" else "VASS"
+    gdf = (areas[areas["region"].str.startswith(prefix)]
+           .dissolve(by="region").reset_index())
+    gdf["geometry"] = gdf.geometry.simplify(tolerance, preserve_topology=True)
+    # representative_point() always lies inside the polygon (a centroid may not)
+    inside = gdf.to_crs(epsg=25833).representative_point().to_crs(epsg=4326)
+    gdf["lon"], gdf["lat"] = inside.x.round(4), inside.y.round(4)
+    return json.loads(gdf[["region", "lon", "lat", "geometry"]].to_json())
+
+
+def save_area_geojson(geo_dir="geo"):
+    """Convert the shapefiles in geo/ to geo/price_areas.geojson and
+    geo/water_areas.geojson. Returns the paths of the written files."""
+    geo_dir = Path(geo_dir)
+    areas = load_areas(geo_dir)
+    paths = []
+    for layer in ("price", "water"):
+        path = geo_dir / f"{layer}_areas.geojson"
+        path.write_text(json.dumps(area_geojson(areas, layer)),
+                        encoding="utf-8")
+        paths.append(path)
+    return paths
 
 
 # ---------- ERA5 download ----------

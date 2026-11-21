@@ -7,4 +7,6 @@ scipy
 scikit-learn
 statsmodels
 geopandas>=1.0
-plotly>=5.20
+plotly>=5.24
+folium>=0.17
+streamlit-folium>=0.22

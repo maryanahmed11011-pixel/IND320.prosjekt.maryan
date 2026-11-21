@@ -96,9 +96,12 @@ r2.error(f"**Lowest:** {lo['filling_degree'] * 100:.1f} % in week "
 
 # ---------- Shortcuts to all pages, grouped like the menu ----------
 st.subheader("🧭 Explore the data")
-st.caption("Choose an area in the sidebar: it is used as the default on all pages.")
+st.caption("Choose an area in the sidebar or on the map: it is used as the "
+           "default on all pages.")
 
 CARDS = [
+    ("Map", "Areas coloured by reservoir filling or weather; click to "
+     "select an area.", "pages/7_Map.py", "Open", "🗺️"),
     ("Data Table", "One row per area, with mini charts of the first month.",
      "pages/1_Data_Table.py", "Open", "📊"),
     ("Plot", "Compare areas over a chosen period in an interactive plot.",

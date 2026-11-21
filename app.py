@@ -4,6 +4,7 @@ app.py works as a router: it builds the sidebar menu with st.navigation,
 holds the global area selector, and runs the selected page. The content
 of each page lives in its own file:
   - home.py                        : front page with key figures
+  - pages/7_Map.py                 : interactive map, click selects area (part 4)
   - pages/1_Data_Table.py          : table with mini charts
   - pages/2_Plot.py                : interactive reservoir plot
   - pages/5_Reservoir_Analysis.py  : STL and spectrogram (part 3)
@@ -25,6 +26,7 @@ st.set_page_config(
 pages = {
     "Overview": [
         st.Page("home.py", title="Home", icon="🏠", default=True),
+        st.Page("pages/7_Map.py", title="Map", icon="🗺️"),
     ],
     "Reservoirs": [
         st.Page("pages/1_Data_Table.py", title="Data Table", icon="📊"),
@@ -45,11 +47,17 @@ pages = {
 # Global selector: one area for the whole app. The key stores the choice
 # in st.session_state, so it persists when switching pages. Each page
 # reads it and uses it as its default (area type, connection, weather).
+# A click on the map sets "pending_area"; it is applied here, before the
+# widget is created, since a widget's value cannot change after that.
+st.session_state.setdefault("price_area", "NO3")
+if "pending_area" in st.session_state:
+    st.session_state["price_area"] = st.session_state.pop("pending_area")
 st.sidebar.selectbox(
-    "Area", list(AREAS), index=2, key="price_area",
+    "Area", list(AREAS), key="price_area",
     format_func=AREAS.get,
     help="Sets the default area on all pages: reservoir data, "
-         "weather data and the matching cross-border connection.",
+         "weather data and the matching cross-border connection. "
+         "Can also be set by clicking an area on the map.",
 )
 
 st.sidebar.caption(

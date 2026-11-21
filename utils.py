@@ -9,6 +9,7 @@ Part 3: weather data from open-meteo (ERA5) for price areas and VASS
 areas. The areas are read from the NVE shapefiles in the geo/ folder of
 the repository, and 1000 random points are sampled per area.
 """
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -16,7 +17,9 @@ import requests
 import streamlit as st
 from pymongo import MongoClient
 
-from analysis import HOURLY_VARS, download_era5, load_areas, sample_locations
+from analysis import (HOURLY_VARS, area_geojson, daily_to_weekly,
+                      download_era5, hourly_to_daily, load_areas,
+                      sample_locations)
 
 # geo/ folder next to this file, so the path works locally and on streamlit.io
 GEO_DIR = Path(__file__).resolve().parent / "geo"
@@ -143,6 +146,10 @@ def load_flows() -> pd.DataFrame:
     docs = list(mongo_db()["flows_daily"].find({}, {"_id": 0}))
     df = pd.DataFrame(docs)
     df["date"] = pd.to_datetime(df["date"])
+    # The days were summed in UTC (part 2), so the first local hour of
+    # 2024 is stored as a one-hour "day" on 2023-12-31 (see the time zone
+    # section in the part 4 notebook). It is left out here.
+    df = df[df["date"] >= "2024-01-01"]
     return df.sort_values(["connection", "direction", "date"]).reset_index(drop=True)
 
 
@@ -172,6 +179,42 @@ def load_weather(region: str, year: int,
         raise ValueError(f"No sampled locations for {region}")
     # Few retries in the app, so a rate limit gives an error message
     # quickly instead of a page that spins for many minutes
-    df = download_era5(locs, f"{year}-01-01", f"{year}-12-31",
+    # ERA5 in open-meteo lags about five days behind today, so the end
+    # date of the current year is moved back to the newest available day
+    end = min(pd.Timestamp(f"{year}-12-31"),
+              pd.Timestamp.today().normalize() - pd.Timedelta(days=6))
+    if end < pd.Timestamp(f"{year}-01-01"):
+        raise ValueError(f"No ERA5 data available yet for {year}")
+    df = download_era5(locs, f"{year}-01-01", f"{end:%Y-%m-%d}",
                        max_points=max_points, retries=2)
     return df.groupby("time")[HOURLY_VARS].mean()
+
+
+@st.cache_data(show_spinner="Aggregating weather data to weeks ...")
+def load_weather_weekly(region: str, year: int,
+                        max_points: int = 5) -> pd.DataFrame:
+    """Weekly weather for a region on the Magasinstatistikk week grid.
+
+    Hourly UTC data -> local days -> weeks ending on Sunday (see
+    hourly_to_daily and daily_to_weekly in analysis.py). Precipitation is
+    summed, the other variables are averaged. The map uses few points per
+    area (max_points=5) to stay within open-meteo's free limits.
+    """
+    hourly = load_weather(region, year, max_points=max_points)
+    return daily_to_weekly(hourly_to_daily(hourly))
+
+
+# ---------- Map areas (GeoJSON) ----------
+
+@st.cache_data
+def load_geojson(layer: str) -> dict:
+    """GeoJSON for "price" (NO1–NO5) or "water" (VASS1–3) areas.
+
+    Reads geo/price_areas.geojson or geo/water_areas.geojson, which the
+    part 4 notebook converts from the NVE shapefiles. If a file is
+    missing, the GeoJSON is built from the shapefiles instead.
+    """
+    path = GEO_DIR / f"{layer}_areas.geojson"
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    return area_geojson(load_areas(GEO_DIR), layer)
