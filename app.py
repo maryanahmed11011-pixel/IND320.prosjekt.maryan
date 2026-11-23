@@ -6,6 +6,7 @@ of each page lives in its own file:
   - home.py                        : front page with key figures
   - pages/7_Map.py                 : interactive map, click selects area (part 4)
   - pages/8_Correlation.py         : sliding window correlation (part 4)
+  - pages/9_Forecast.py            : reservoir forecast with River (part 4)
   - pages/1_Data_Table.py          : table with mini charts
   - pages/2_Plot.py                : interactive reservoir plot
   - pages/5_Reservoir_Analysis.py  : STL and spectrogram (part 3)
@@ -40,6 +41,9 @@ pages = {
                 title="Weather Anomalies", icon="🌦️"),
         st.Page("pages/8_Correlation.py",
                 title="Weather vs. Reservoirs", icon="🔗"),
+    ],
+    "Predict": [
+        st.Page("pages/9_Forecast.py", title="Reservoir Forecast", icon="🔮"),
     ],
     "Power exchange": [
         st.Page("pages/4_Cross_Border.py",

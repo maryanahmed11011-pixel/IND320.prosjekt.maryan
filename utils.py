@@ -18,8 +18,8 @@ import streamlit as st
 from pymongo import MongoClient
 
 from analysis import (HOURLY_VARS, area_geojson, daily_to_weekly,
-                      download_era5, hourly_to_daily, load_areas,
-                      sample_locations)
+                      download_era5, fetch_exchange_rates, forecast_filling,
+                      hourly_to_daily, load_areas, sample_locations)
 
 # geo/ folder next to this file, so the path works locally and on streamlit.io
 GEO_DIR = Path(__file__).resolve().parent / "geo"
@@ -214,6 +214,20 @@ def load_weather_weekly_years(region: str, start_year: int, end_year: int,
                         for y in range(start_year, end_year + 1)])
     hourly = hourly[~hourly.index.duplicated()].sort_index()
     return daily_to_weekly(hourly_to_daily(hourly))
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner="Loading exchange rates from Norges Bank ...")
+def load_exchange_rates_weekly(start_year: int) -> pd.DataFrame:
+    """EUR and USD (NOK per unit) as weekly means on the Sunday weeks."""
+    daily = fetch_exchange_rates(("EUR", "USD"), start=f"{start_year}-01-01")
+    return daily_to_weekly(daily)
+
+
+@st.cache_data(show_spinner="Training the model and forecasting ...")
+def cached_forecast(y: pd.Series, X, exog: tuple, end, settings: tuple):
+    """forecast_filling with caching, so the same forecast is not trained
+    twice (settings is a tuple of (name, value) pairs, which can be hashed)."""
+    return forecast_filling(y, X=X, exog=list(exog), end=end, **dict(settings))
 
 
 # ---------- Map areas (GeoJSON) ----------

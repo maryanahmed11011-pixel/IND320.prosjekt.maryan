@@ -324,6 +324,136 @@ def sliding_window_correlation(y, x, window=26, lag=0):
     return y.rolling(window, center=True).corr(x.shift(lag))
 
 
+# ---------- Forecasting reservoir filling with River (part 4) ----------
+# Weekly resolution (the resolution of Magasinstatistikk). The model is
+# River's SNARIMAX, which learns one week at a time (learn_one) and
+# forecasts recursively (dynamic forecasting: each forecast step builds on
+# the previous forecasts). Exogenous variables (weather, exchange rates)
+# are optional. Future values of the exogenous variables are unknown when
+# forecasting, so by default their weekly averages over the training
+# period are used ("climatology"); "observed" uses the real values, which
+# is only possible when testing on the past.
+
+# Best setting from the tests in the part 4 notebook (section 5.1):
+# seasonal differencing (sd=1) with two AR terms, ten years of history and
+# no exogenous variables
+FORECAST_DEFAULTS = dict(history_weeks=520, horizon=12, p=2, d=0, q=0, m=52,
+                         sp=0, sd=1, sq=0, learning_rate=0.01)
+
+
+def _snarimax(p, d, q, m, sp, sd, sq, learning_rate):
+    """River SNARIMAX with a scaled linear regression as regressor."""
+    from river import linear_model, optim, preprocessing, time_series
+    return time_series.SNARIMAX(
+        p=p, d=d, q=q, m=m, sp=sp, sd=sd, sq=sq,
+        regressor=(preprocessing.StandardScaler()
+                   | linear_model.LinearRegression(
+                       intercept_init=0.0,
+                       optimizer=optim.SGD(learning_rate),
+                       intercept_lr=learning_rate)),
+    )
+
+
+def _future_weeks(last, horizon):
+    """The `horizon` Sundays after `last`."""
+    return pd.date_range(last + pd.Timedelta(weeks=1), periods=horizon,
+                         freq="W-SUN")
+
+
+def future_exog(X, exog, last, horizon, how="climatology"):
+    """Exogenous values for the forecast weeks after `last`.
+
+    climatology : mean for the same ISO week in the data up to `last`
+    observed    : the real values (only for tests on the past); weeks
+                  without data fall back to climatology
+    """
+    dates = _future_weeks(last, horizon)
+    known = X.loc[X.index <= last, list(exog)]
+    clim = known.groupby(known.index.isocalendar().week.values).mean()
+    out = clim.reindex(dates.isocalendar().week.values)
+    out.index = dates
+    if how == "observed":
+        out = X[list(exog)].reindex(dates).fillna(out)
+    return out.ffill().bfill()
+
+
+def forecast_filling(y, X=None, exog=(), end=None, history_weeks=520,
+                     horizon=12, p=2, d=1, q=0, m=52, sp=0, sd=0, sq=0,
+                     learning_rate=0.01, future="climatology"):
+    """Forecast the weekly filling degree with River's SNARIMAX.
+
+    y             : weekly filling degree (%), indexed by Sunday dates
+    X, exog       : DataFrame with weekly exogenous data and the columns to
+                    use (empty = no exogenous variables)
+    end           : last week used for training (None = newest week)
+    history_weeks : number of weeks the model learns from before `end`
+    horizon       : number of weeks to forecast
+    p, d, q       : AR order, differencing, MA order
+    m, sp, sd, sq : season length (52 weeks) and seasonal AR, differencing
+                    and MA orders
+    future        : how future exogenous values are set ("climatology" or
+                    "observed", see future_exog)
+    Returns a Series with the forecast, indexed by the forecast weeks.
+    """
+    exog = list(exog)
+    y = y.dropna()
+    if end is not None:
+        y = y[y.index <= pd.Timestamp(end)]
+    if exog:
+        # Only weeks with exogenous data can be used for training
+        y = y[y.index >= X[exog].dropna().index.min()]
+    train = y.iloc[-history_weeks:]
+    if exog:
+        x_train = X[exog].reindex(train.index).interpolate(limit_direction="both")
+
+    model = _snarimax(p, d, q, m, sp, sd, sq, learning_rate)
+    for week, value in train.items():
+        x = x_train.loc[week].to_dict() if exog else None
+        model.learn_one(y=value, x=x)
+
+    xs = None
+    if exog:
+        xs = future_exog(X, exog, train.index[-1], horizon,
+                         how=future).to_dict("records")
+    pred = model.forecast(horizon=horizon, xs=xs)
+    # A filling degree is always between 0 and 100 %
+    return pd.Series(pred, index=_future_weeks(train.index[-1], horizon),
+                     name="forecast").clip(0, 100)
+
+
+def seasonal_naive(y, end, horizon=12):
+    """Baseline: the newest level plus last year's change over the same
+    weeks. A forecast should beat this to be useful."""
+    y = y.dropna()
+    y = y[y.index <= pd.Timestamp(end)]
+    last_week = y.index[-1]
+    dates = _future_weeks(last_week, horizon)
+    year_ago = pd.Timedelta(weeks=52)
+    change = y.reindex(dates - year_ago).values - y.get(last_week - year_ago)
+    return pd.Series(y.iloc[-1] + change, index=dates, name="seasonal_naive")
+
+
+def backtest_forecast(y, origins, horizon=12, X=None, **settings):
+    """Test forecast_filling from several start weeks (origins).
+
+    Returns one row per origin with the mean absolute error over the
+    horizon (MAE, percentage points), for the model and for the seasonal
+    naive baseline, and the time it took.
+    """
+    rows = []
+    for origin in origins:
+        t0 = time.perf_counter()
+        fc = forecast_filling(y, X=X, end=origin, horizon=horizon, **settings)
+        seconds = time.perf_counter() - t0
+        actual = y.reindex(fc.index)
+        base = seasonal_naive(y, origin, horizon)
+        rows.append({"origin": origin,
+                     "mae": (fc - actual).abs().mean(),
+                     "mae_baseline": (base - actual).abs().mean(),
+                     "seconds": seconds})
+    return pd.DataFrame(rows)
+
+
 # ---------- Outliers: SPC on DCT high-pass filtered data ----------
 
 def spc_outliers(series, cutoff_days=30, n_std=3.0, label=None):
