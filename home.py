@@ -8,7 +8,7 @@ from utils import load_data  # shared, cached data loading
 df = load_data("NO")  # national total from the NVE API
 
 # ---------- Top section ----------
-st.title("💧 Norway's Water Battery")
+st.title(" Norway's Water Battery")
 st.markdown(
     "Around 90 % of Norway's electricity comes from hydropower. The water stored in the "
     "reservoirs works like a giant **battery**: it fills up with snowmelt in spring and summer, "
@@ -99,27 +99,31 @@ st.subheader("🧭 Explore the data")
 st.caption("Choose an area in the sidebar or on the map: it is used as the "
            "default on all pages.")
 
+# Same groups and order as the menu (Overview, Explore, Analyse, Predict)
 CARDS = [
     ("Map", "Areas coloured by reservoir filling or weather; click to "
-     "select an area.", "pages/7_Map.py", "Open", "🗺️"),
-    ("Data Table", "One row per area, with mini charts of the first month.",
-     "pages/1_Data_Table.py", "Open", "📊"),
-    ("Plot", "Compare areas over a chosen period in an interactive plot.",
-     "pages/2_Plot.py", "Open", "📈"),
-    ("Reservoir Analysis", "Seasonal-trend decomposition (STL) and spectrogram "
-     "of the filling degree.", "pages/5_Reservoir_Analysis.py",
-     "Open", "🔍"),
-    ("Weather Anomalies", "Heavy rain and abrupt temperature changes found with "
-     "SPC and LOF on ERA5 data.", "pages/6_Weather_Anomalies.py",
-     "Open", "🌦️"),
+     "select an area.", "pages/7_Map.py", "🗺️"),
+    ("Reservoir Data", "Overview table with mini charts and an interactive "
+     "plot.", "pages/1_Reservoir_Data.py", "📊"),
     ("Cross-border Flows", "Electricity in and out of Norway, from MongoDB.",
-     "pages/4_Cross_Border.py", "Open", "🔌"),
+     "pages/4_Cross_Border.py", "🔌"),
+    ("Exchange Rates", "EUR and USD against NOK from Norges Bank.",
+     "pages/3_Exchange_Rates.py", "💱"),
+    ("Reservoir Analysis", "Seasonal-trend decomposition (STL) and spectrogram "
+     "of the filling degree.", "pages/5_Reservoir_Analysis.py", "🔍"),
+    ("Weather Anomalies", "Unusual temperature and heavy rain found with SPC "
+     "and LOF on ERA5 data.", "pages/6_Weather_Anomalies.py", "🌦️"),
+    ("Weather vs. Reservoirs", "Sliding window correlation between weather "
+     "and reservoir filling.", "pages/8_Correlation.py", "🔗"),
+    ("Reservoir Forecast", "Forecast of the filling degree with River "
+     "SNARIMAX.", "pages/9_Forecast.py", "🔮"),
 ]
-cols = st.columns(len(CARDS))
-for col, (title, text, page, label, icon) in zip(cols, CARDS):
-    with col.container(border=True):
-        st.markdown(f"**{title}**  \n{text}")
-        st.page_link(page, label=label, icon=icon)
+# Two rows of four cards
+for row in (CARDS[:4], CARDS[4:]):
+    for col, (title, text, page, icon) in zip(st.columns(4), row):
+        with col.container(border=True):
+            st.markdown(f"**{title}**  \n{text}")
+            st.page_link(page, label="Open", icon=icon)
 
 # ---------- Links ----------
 st.divider()

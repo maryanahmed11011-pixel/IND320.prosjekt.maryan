@@ -7,14 +7,15 @@ of each page lives in its own file:
   - pages/7_Map.py                 : interactive map, click selects area (part 4)
   - pages/8_Correlation.py         : sliding window correlation (part 4)
   - pages/9_Forecast.py            : reservoir forecast with River (part 4)
-  - pages/1_Data_Table.py          : table with mini charts
-  - pages/2_Plot.py                : interactive reservoir plot
+  - pages/1_Reservoir_Data.py      : table with mini charts + plot (part 4)
+  - pages/3_Exchange_Rates.py      : EUR/USD from Norges Bank (part 4)
   - pages/5_Reservoir_Analysis.py  : STL and spectrogram (part 3)
   - pages/6_Weather_Anomalies.py   : SPC and LOF on ERA5 data (part 3)
   - pages/4_Cross_Border.py        : cross-border flows (MongoDB)
 """
 import streamlit as st
 
+from theme import GROUP_COLORS
 from utils import AREAS
 
 st.set_page_config(
@@ -24,19 +25,22 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Pages grouped by topic
+# Pages grouped by type of task, as in the sketch in the part 4 notebook:
+# Overview -> Explore (the data sources) -> Analyse -> Predict
 pages = {
     "Overview": [
         st.Page("home.py", title="Home", icon="🏠", default=True),
         st.Page("pages/7_Map.py", title="Map", icon="🗺️"),
     ],
-    "Reservoirs": [
-        st.Page("pages/1_Data_Table.py", title="Data Table", icon="📊"),
-        st.Page("pages/2_Plot.py", title="Plot", icon="📈"),
+    "Explore": [
+        st.Page("pages/1_Reservoir_Data.py", title="Reservoir Data", icon="📊"),
+        st.Page("pages/4_Cross_Border.py",
+                title="Cross-border Flows", icon="🔌"),
+        st.Page("pages/3_Exchange_Rates.py", title="Exchange Rates", icon="💱"),
+    ],
+    "Analyse": [
         st.Page("pages/5_Reservoir_Analysis.py",
                 title="Reservoir Analysis", icon="🔍"),
-    ],
-    "Weather": [
         st.Page("pages/6_Weather_Anomalies.py",
                 title="Weather Anomalies", icon="🌦️"),
         st.Page("pages/8_Correlation.py",
@@ -44,10 +48,6 @@ pages = {
     ],
     "Predict": [
         st.Page("pages/9_Forecast.py", title="Reservoir Forecast", icon="🔮"),
-    ],
-    "Power exchange": [
-        st.Page("pages/4_Cross_Border.py",
-                title="Cross-border Flows", icon="🔌"),
     ],
 }
 
@@ -69,8 +69,36 @@ st.sidebar.selectbox(
 
 st.sidebar.caption(
     "IND320 – Compulsory work 4\n\n"
-    "Data: NVE Magasinstatistikk API, ENTSO-E (via MongoDB) "
-    "and open-meteo (ERA5)"
+    "Data: NVE Magasinstatistikk API, ENTSO-E (via MongoDB), "
+    "open-meteo (ERA5) and Norges Bank"
 )
 
-st.navigation(pages).run()
+page = st.navigation(pages)
+
+# Each menu group has its own colour (theme.GROUP_COLORS). The active
+# page's link in the menu and a small label above the page title get the
+# colour of its group, so it is clear which part of the app is active.
+group = next(name for name, items in pages.items()
+             if any(p.title == page.title for p in items))
+colour = GROUP_COLORS[group]
+# Short description of each group, shown in the banner over the title
+GROUP_TEXT = {
+    "Overview": "Key figures and the map",
+    "Explore": "The data sources",
+    "Analyse": "Patterns, anomalies and relationships",
+    "Predict": "Forecasting",
+}
+# (no indentation inside the HTML: Markdown would show indented lines as code)
+css = (
+    f'[data-testid="stSidebarNavLink"][aria-current="page"] '
+    f"{{background: {colour}26; border-left: 4px solid {colour};}}"
+    f" .group-banner {{background: {colour}1A; border-left: 6px solid {colour};"
+    f" border-radius: 6px; padding: 0.45rem 0.9rem; margin-bottom: 0.4rem;}}"
+    f" .group-banner b {{color: {colour}; font-size: 1.05rem;"
+    f" letter-spacing: 0.06em; text-transform: uppercase;}}"
+    f" .group-banner span {{color: #4a4a4a; font-size: 0.95rem;"
+    f" margin-left: 0.6rem;}}"
+)
+st.markdown(f'<style>{css}</style><div class="group-banner"><b>{group}</b>'
+            f'<span>{GROUP_TEXT[group]}</span></div>', unsafe_allow_html=True)
+page.run()

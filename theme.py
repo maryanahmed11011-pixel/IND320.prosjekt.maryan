@@ -26,6 +26,14 @@ COLORS = {
     "neutral": "#8c8c8c",   # grey: limits, last year, helper lines
 }
 
+# Colours of the menu groups (app.py), as in the sketch in the notebook
+GROUP_COLORS = {
+    "Overview": "#3182bd",   # blue
+    "Explore": "#2ca25f",    # green
+    "Analyse": "#f28e2b",    # orange
+    "Predict": "#08306b",    # dark blue
+}
+
 # Colours for several lines in one plot (e.g. NO1-NO5): blues first,
 # then contrasting colours, so all lines can be told apart
 LINE_COLORS = ["#08306b", "#3182bd", "#6baed6", "#f28e2b", "#2ca25f"]

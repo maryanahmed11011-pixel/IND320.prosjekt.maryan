@@ -217,10 +217,15 @@ def load_weather_weekly_years(region: str, start_year: int, end_year: int,
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner="Loading exchange rates from Norges Bank ...")
+def load_exchange_rates(start_year: int) -> pd.DataFrame:
+    """EUR and USD (NOK per unit) per business day from Norges Bank.
+    Cached for six hours, since new rates are published once a day."""
+    return fetch_exchange_rates(("EUR", "USD"), start=f"{start_year}-01-01")
+
+
 def load_exchange_rates_weekly(start_year: int) -> pd.DataFrame:
     """EUR and USD (NOK per unit) as weekly means on the Sunday weeks."""
-    daily = fetch_exchange_rates(("EUR", "USD"), start=f"{start_year}-01-01")
-    return daily_to_weekly(daily)
+    return daily_to_weekly(load_exchange_rates(start_year))
 
 
 @st.cache_data(show_spinner="Training the model and forecasting ...")
