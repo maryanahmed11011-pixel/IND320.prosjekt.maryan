@@ -14,8 +14,8 @@ import streamlit as st
 
 from analysis import FORECAST_DEFAULTS, seasonal_naive
 from theme import COLORS
-from utils import (AREAS, cached_forecast, load_data, load_exchange_rates_weekly,
-                   load_weather_weekly_years)
+from utils import (AREAS, NVE, cached_forecast, load_data, load_exchange_rates_weekly,
+                   load_or_stop, load_weather_weekly_years)
 
 EXOG = {
     "temperature_2m": "Temperature (weekly mean)",
@@ -37,7 +37,7 @@ st.caption(f"{AREAS.get(area, area)} · River SNARIMAX, weekly data from NVE "
 # ---------- Target: weekly filling degree (%) ----------
 area_type = "VASS" if area.startswith("VASS") else "EL"
 number = int(area.replace("VASS", "").replace("NO", ""))
-fill = load_data(area_type)
+fill = load_or_stop(NVE, load_data, area_type)
 y = (fill[fill["area_number"] == number].set_index("date")["filling_degree"]
      .sort_index() * 100)
 weeks = list(y.index)

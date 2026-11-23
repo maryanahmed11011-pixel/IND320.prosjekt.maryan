@@ -19,7 +19,7 @@ from plotly.subplots import make_subplots
 
 from analysis import correlation_by_lag, lagged_correlation, sliding_window_correlation
 from theme import COLORS
-from utils import AREAS, load_data, load_weather_weekly_years
+from utils import AREAS, NVE, load_data, load_or_stop, load_weather_weekly_years
 
 WEATHER = {
     "temperature_2m": "Temperature (°C, weekly mean)",
@@ -68,7 +68,7 @@ window = s2.slider("Window length (weeks)", 4, 104, 26, step=2,
 # ---------- Data on the same weekly grid ----------
 area_type = "VASS" if area.startswith("VASS") else "EL"
 number = int(area.replace("VASS", "").replace("NO", ""))
-res = load_data(area_type)
+res = load_or_stop(NVE, load_data, area_type)
 res = (res[res["area_number"] == number].set_index("date")["filling_degree"]
        .sort_index() * 100)
 y = res.diff() if res_var == "change" else res

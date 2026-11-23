@@ -23,7 +23,8 @@ import streamlit as st
 from streamlit_folium import st_folium
 
 from theme import COLORS
-from utils import AREAS, area_label, load_data, load_geojson, load_weather_weekly
+from utils import (AREAS, NVE, area_label, load_data, load_geojson,
+                   load_or_stop, load_weather_weekly)
 
 LAYERS = {"price": "Price areas (NO1–NO5)", "water": "Water areas (VASS1–3)"}
 MODES = {
@@ -67,7 +68,7 @@ else:
 
 # ---------- Time: the weeks of Magasinstatistikk (dated on Sundays) ----------
 area_type = "EL" if layer == "price" else "VASS"
-filling = load_data(area_type)
+filling = load_or_stop(NVE, load_data, area_type)
 weeks = sorted(pd.to_datetime(filling["date"].unique()))
 if mode == "weather":
     # ERA5 is downloaded per year from 2000 (as on the weather page) and
@@ -90,7 +91,8 @@ week = t2.select_slider(
 st.session_state["map_week"] = week  # shared with other pages
 
 # ---------- Values per area for the chosen week ----------
-geojson = load_geojson(layer)
+geojson = load_or_stop("the GeoJSON files in geo/", load_geojson, layer,
+                       hint="Check that the geo/ folder is in the repository.")
 features = geojson["features"]
 regions = [f["properties"]["region"] for f in features]
 

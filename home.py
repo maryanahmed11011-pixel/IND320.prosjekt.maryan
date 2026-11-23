@@ -3,12 +3,13 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from theme import COLORS  # shared palette (also registers the Plotly template)
-from utils import load_data  # shared, cached data loading
+from utils import NVE, load_data, load_or_stop  # shared, cached data loading
 
-df = load_data("NO")  # national total from the NVE API
+# National total from the NVE API (a readable error message if it is down)
+df = load_or_stop(NVE, load_data, "NO")
 
 # ---------- Top section ----------
-st.title(" Norway's Water Battery")
+st.title("💧 Norway's Water Battery")
 st.markdown(
     "Around 90 % of Norway's electricity comes from hydropower. The water stored in the "
     "reservoirs works like a giant **battery**: it fills up with snowmelt in spring and summer, "

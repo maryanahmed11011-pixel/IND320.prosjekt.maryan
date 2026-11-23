@@ -90,14 +90,47 @@ def area_label(area_type: str, number: int) -> str:
     return f"VASS{number}"
 
 
+# ---------- Error handling (bonus task, part 4) ----------
+# Names of the data sources, used in the error messages
+NVE = "the NVE Magasinstatistikk API"
+MONGO = "the MongoDB database"
+METEO = "open-meteo (ERA5)"
+NORGES_BANK = "Norges Bank"
+
+
+def stop_with_error(source: str, err: Exception,
+                    hint: str = "Please try again in a minute.") -> None:
+    """Show a short, readable error message instead of a traceback, with
+    the technical details folded away, and stop the page."""
+    st.error(f"**Could not load data from {source}.** {hint}", icon="⚠️")
+    with st.expander("Technical details"):
+        st.code(f"{type(err).__name__}: {err}")
+    st.stop()
+
+
+def load_or_stop(source: str, func, *args, hint: str | None = None, **kwargs):
+    """Call a data loading function; on any error, show a useful message
+    (stop_with_error) instead of crashing the page."""
+    try:
+        return func(*args, **kwargs)
+    except Exception as err:  # connection, timeout, HTTP or data errors
+        stop_with_error(source, err, hint or "Please try again in a minute.")
+
+
 def mongo_db():
     """MongoDB database for the app.
 
     The connection string is read from st.secrets (locally:
     .streamlit/secrets.toml, on streamlit.io: Secrets in the app settings),
-    so it never ends up on GitHub.
+    so it never ends up on GitHub. A short server timeout makes the page
+    show an error after 5 seconds instead of waiting for 30.
     """
-    return MongoClient(st.secrets["mongo"]["uri"])["ind320"]
+    try:
+        uri = st.secrets["mongo"]["uri"]
+    except Exception as err:  # no secrets file or no [mongo] section
+        raise RuntimeError("MongoDB is not configured: add [mongo] uri to "
+                           ".streamlit/secrets.toml") from err
+    return MongoClient(uri, serverSelectionTimeoutMS=5000)["ind320"]
 
 
 # ---------- Reservoir data (NVE API) ----------
@@ -108,7 +141,13 @@ def fetch_reservoirs() -> pd.DataFrame:
     response = requests.get(API_URL, timeout=30)
     response.raise_for_status()
     df = pd.DataFrame(response.json()).rename(columns=RENAME)
-    df["date"] = pd.to_datetime(df["date"])
+    # Check the answer before using it, so a changed or empty API response
+    # gives a clear message instead of a KeyError somewhere else
+    missing = {"date", "area_type", "area_number", "filling_degree"} - set(df.columns)
+    if df.empty or missing:
+        raise ValueError(f"Unexpected answer from the NVE API (missing: {missing})")
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date"])
     # Month column (e.g. "1995-01") used to select periods in the app
     df["month"] = df["date"].dt.to_period("M").astype(str)
     return df
@@ -134,8 +173,11 @@ def filling_series(region: str) -> pd.Series:
     area_type = "VASS" if region.startswith("VASS") else "EL"
     df = load_data(area_type)
     number = int(region[-1])
-    return (df[df["area_number"] == number]
-            .set_index("date")["filling_degree"].sort_index())
+    series = (df[df["area_number"] == number]
+              .set_index("date")["filling_degree"].sort_index())
+    # STL and the spectrogram need a complete weekly series: single missing
+    # weeks are interpolated, longer gaps at the ends are dropped
+    return series.interpolate(limit=4, limit_area="inside").dropna()
 
 
 # ---------- Cross-border flows (MongoDB) ----------
@@ -144,7 +186,9 @@ def filling_series(region: str) -> pd.Series:
 def load_flows() -> pd.DataFrame:
     """Daily cross-border flows, stored in MongoDB from the notebook."""
     docs = list(mongo_db()["flows_daily"].find({}, {"_id": 0}))
-    df = pd.DataFrame(docs)
+    if not docs:
+        raise ValueError("The collection flows_daily in MongoDB is empty")
+    df = pd.DataFrame(docs).dropna(subset=["date", "energy_mwh"])
     df["date"] = pd.to_datetime(df["date"])
     # The days were summed in UTC (part 2), so the first local hour of
     # 2024 is stored as a one-hour "day" on 2023-12-31 (see the time zone
@@ -187,7 +231,15 @@ def load_weather(region: str, year: int,
     # quickly instead of a page that spins for many minutes
     df = download_era5(locs, f"{year}-01-01", f"{end:%Y-%m-%d}",
                        max_points=max_points, retries=2)
-    return df.groupby("time")[HOURLY_VARS].mean()
+    hourly = df.groupby("time")[HOURLY_VARS].mean()
+    # Missing values: short gaps (up to 6 hours) are interpolated, longer
+    # gaps are dropped. The number is kept in attrs, so pages can show it.
+    missing = int(hourly.isna().any(axis=1).sum())
+    hourly = hourly.interpolate(limit=6, limit_area="inside").dropna()
+    if hourly.empty:
+        raise ValueError(f"No weather data returned for {region} in {year}")
+    hourly.attrs["missing_hours"] = missing
+    return hourly
 
 
 @st.cache_data(show_spinner="Aggregating weather data to weeks ...")

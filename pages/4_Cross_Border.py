@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from theme import COLORS, DIRECTION_COLORS  # shared palette and Plotly template
-from utils import load_flows
+from utils import MONGO, load_flows, load_or_stop
 
 st.title("🔌 Cross-border Flows")
 st.write(
@@ -18,7 +18,10 @@ st.write(
     "through each cross-border connection, 2024–2025."
 )
 
-flows = load_flows()
+# Daily flows from MongoDB; if the database cannot be reached (or the
+# connection is not configured), a readable message is shown instead
+flows = load_or_stop(MONGO, load_flows, hint="Check the internet connection "
+                     "and the MongoDB settings, or try again later.")
 connections = sorted(flows["connection"].unique())
 
 # Default connection: the first one from the price area in the sidebar

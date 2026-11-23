@@ -5,14 +5,14 @@ The area comes from the global selector in the sidebar (app.py).
 import streamlit as st
 
 from analysis import plot_spectrogram, stl_decompose
-from utils import filling_series
+from utils import NVE, filling_series, load_or_stop
 
 area = st.session_state.get("price_area", "NO3")
 st.title(f"🔍 Reservoir analysis – {area}")
 st.caption("Weekly filling degree from NVE Magasinstatistikk, 1995 until "
            "today. Change area in the sidebar.")
 
-series = filling_series(area)
+series = load_or_stop(NVE, filling_series, area)
 tab_stl, tab_spec = st.tabs(["STL decomposition", "Spectrogram"])
 
 with tab_stl:

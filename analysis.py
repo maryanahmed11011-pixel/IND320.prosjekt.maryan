@@ -461,6 +461,7 @@ def spc_outliers(series, cutoff_days=30, n_std=3.0, label=None):
 
     Returns (fig, summary dict, outliers DataFrame).
     """
+    series = series.dropna()  # the DCT cannot handle missing values
     x = series.to_numpy(dtype=float)
 
     # DCT coefficient k has period ~ 2n/k hours: keep low frequencies
@@ -511,6 +512,7 @@ def lof_anomalies(series, contamination=0.01, n_neighbors=20,
 
     Returns (fig, summary dict, anomalies DataFrame).
     """
+    series = series.dropna()  # LOF cannot handle missing values
     x = series.to_numpy(dtype=float)
     t = (series.index - series.index[0]) / pd.Timedelta(hours=time_scale)
     features = np.column_stack([np.asarray(t, dtype=float), x])

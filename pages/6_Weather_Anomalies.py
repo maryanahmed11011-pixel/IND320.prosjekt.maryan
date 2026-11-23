@@ -7,7 +7,7 @@ automatically in the background and cached.
 import streamlit as st
 
 from analysis import lof_anomalies, spc_outliers
-from utils import load_locations, load_weather
+from utils import METEO, load_locations, load_or_stop, load_weather
 
 LABELS = {
     "temperature_2m": "Temperature (°C)",
@@ -36,17 +36,18 @@ with top_left:
                "the numbers differ slightly from the notebook.")
 with top_right:
     # Map of the 1000 random points, sampled from the NVE shapefiles in geo/
-    locs = load_locations()
+    locs = load_or_stop("the NVE shapefiles in geo/", load_locations)
     st.map(locs[locs["region"] == area], latitude="lat", longitude="lon",
            size=800, color="#3182bd", height=220)
 
-try:
-    weather = load_weather(area, year)
-except Exception as err:  # e.g. rate limit (HTTP 429) from open-meteo
-    st.error("Could not download weather data from open-meteo. The free "
-             "API may be rate limited – please try again in a minute.\n\n"
-             f"Details: {err}")
-    st.stop()
+# e.g. rate limit (HTTP 429) from open-meteo -> readable message, no crash
+weather = load_or_stop(METEO, load_weather, area, year,
+                       hint="The free API may be rate limited – please try "
+                            "again in a minute.")
+# Missing hours are handled in load_weather (short gaps interpolated)
+if weather.attrs.get("missing_hours"):
+    st.caption(f"{weather.attrs['missing_hours']} hours had missing values; "
+               "short gaps were interpolated and longer ones left out.")
 tab_spc, tab_lof = st.tabs(["Outliers (SPC)", "Anomalies (LOF)"])
 
 with tab_spc:
