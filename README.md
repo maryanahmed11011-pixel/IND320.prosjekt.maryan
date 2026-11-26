@@ -7,7 +7,7 @@ from ENTSO-E (stored in MongoDB) and exchange rates from Norges Bank.
 
 
 - **App:** https://ind320prosjektmaryan-lmvbjxajmrnrqkykq8ivne.streamlit.app/
-- **Screencast (part 3):** https://github.com/maryanahmed11011-pixel/IND320-screencasts/blob/main/screencast_del3.mp4
+- **Screencast (part 4):**  https://nmbu.cloud.panopto.eu/Panopto/Pages/Viewer.aspx?id=33b5d2d4-f72e-469a-9ddb-b50e00a70fd3
 - **Notebooks:** `notebooks/ind320_compulsory_1.ipynb`, `_2.ipynb`, `_3.ipynb`, `_4.ipynb`
 
 ## Structure
