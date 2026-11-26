@@ -76,16 +76,29 @@ if mode == "weather":
     newest = pd.Timestamp.today().normalize() - pd.Timedelta(days=6)
     weeks = [w for w in weeks if 2000 <= w.year and w <= newest]
 
-default_week = pd.Timestamp(st.session_state.get("map_week", weeks[-1]))
+# The widgets get fixed keys and their start values are put in
+# session_state *before* they are created, and only when needed. Passing a
+# new value= on every run made Streamlit recreate the slider after each
+# click, so the handle jumped to another week.
+# "map_week" is shared with other pages and survives page changes (the
+# widget keys are removed by Streamlit when you leave the page).
+if pd.Timestamp(st.session_state.get("map_week", weeks[-1])) not in weeks:
+    st.session_state["map_week"] = weeks[-1]
+shared_week = pd.Timestamp(st.session_state.get("map_week", weeks[-1]))
+
 years = sorted({w.year for w in weeks}, reverse=True)
+if st.session_state.get("map_year") not in years:
+    st.session_state["map_year"] = shared_week.year
 t1, t2 = st.columns([1, 4])
-year = t1.selectbox("Year", years,
-                    index=years.index(default_week.year)
-                    if default_week.year in years else 0)
+year = t1.selectbox("Year", years, key="map_year")
+
 year_weeks = [w for w in weeks if w.year == year]
-start_value = default_week if default_week in year_weeks else year_weeks[-1]
+if st.session_state.get("map_week_slider") not in year_weeks:
+    # first visit, or a new year was chosen
+    st.session_state["map_week_slider"] = (shared_week if shared_week in year_weeks
+                                           else year_weeks[-1])
 week = t2.select_slider(
-    "Week (ending Sunday)", options=year_weeks, value=start_value,
+    "Week (ending Sunday)", options=year_weeks, key="map_week_slider",
     format_func=lambda d: f"Week {d.isocalendar().week} · {d:%d %b %Y}",
 )
 st.session_state["map_week"] = week  # shared with other pages
@@ -124,9 +137,22 @@ else:
         colormap = cm.LinearColormap(["#f7fbff", "#6baed6", "#08306b"],
                                      vmin=vmin, vmax=vmax)
 colormap.caption = f"{title} ({unit})"
+no_data = all(pd.isna(values.get(r)) for r in regions)
 
-if all(pd.isna(values.get(r)) for r in regions):
-    st.info("No data for the chosen week. Try another week.")
+
+def legend_html():
+    """Colour legend drawn by Streamlit under the map (not inside the map,
+    where it covered the +/- zoom buttons and made the map redraw)."""
+    stops = [colormap(vmin + (vmax - vmin) * i / 10) for i in range(11)]
+    ticks = "".join(f"<span>{vmin + (vmax - vmin) * i / 4:g}</span>"
+                    for i in range(5))
+    return (f'<div style="max-width:420px;font-size:13px">'
+            f'<b>{title} ({unit})</b>'
+            f'<div style="height:12px;border:1px solid #ccc;margin-top:4px;'
+            f'background:linear-gradient(to right,{",".join(stops)})"></div>'
+            f'<div style="display:flex;justify-content:space-between">'
+            f'{ticks}</div></div>')
+
 
 selected = st.session_state.get("price_area", "NO3")
 
@@ -148,7 +174,8 @@ base.get_root().header.add_child(folium.Element(
     "<style>.leaflet-container {background: #ffffff;}"
     " .leaflet-interactive:focus {outline: none;}</style>"))
 base.fit_bounds([[57.8, 4.0], [71.3, 31.2]])  # mainland Norway
-colormap.add_to(base)  # legend (changes only with the colour mode)
+# The legend is NOT added to the base map: then the base map is identical
+# in every week and mode, so streamlit-folium never has to redraw it
 
 # ---------- Layer with the areas: swapped in place on every run ----------
 areas_layer = folium.FeatureGroup(name="areas")
@@ -194,6 +221,7 @@ with left:
         # Only clicks trigger a rerun (not panning or zooming)
         returned_objects=["last_active_drawing", "last_object_clicked"],
     )
+    st.markdown(legend_html(), unsafe_allow_html=True)
 
 # Only a *change* in the clicked area counts, so an old click does not
 # override a later choice in the sidebar. The sidebar widget already
@@ -233,6 +261,10 @@ if click_id is not None and click_id != st.session_state.get(seen_key):
 with right:
     st.subheader(selected)
     st.caption(AREAS.get(selected, ""))
+    # Shown here and not above the map: a message that comes and goes
+    # above the map moves it on the page, and then Streamlit draws it again
+    if no_data:
+        st.info("No data for the chosen week. Try another week.")
     if selected in values and pd.notna(values[selected]):
         st.metric(f"{title}, week {week.isocalendar().week} {week.year}",
                   f"{values[selected]:.1f} {unit}")
