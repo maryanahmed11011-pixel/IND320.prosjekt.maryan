@@ -11,6 +11,7 @@ import streamlit as st
 
 from analysis import daily_to_weekly
 from theme import COLORS
+from insights import csv_download
 from utils import load_exchange_rates
 
 CURRENCY_COLORS = {"EUR": COLORS["dark"], "USD": COLORS["accent"]}
@@ -57,6 +58,17 @@ for col, cur in zip(cols, currencies):
                f"{series.iloc[-1] - series.iloc[0]:+.3f} since "
                f"{series.index[0]:%d %b %Y}", delta_color="off")
 
+# The conclusion in one sentence: a higher rate means a weaker krone
+parts = []
+for cur in currencies:
+    series = daily[cur].dropna()
+    change = (series.iloc[-1] / series.iloc[0] - 1) * 100
+    word = "weaker" if change > 0 else "stronger"
+    parts.append(f"one {'euro' if cur == 'EUR' else 'US dollar'} costs "
+                 f"**{abs(change):.1f} % {'more' if change > 0 else 'less'}** "
+                 f"(the krone is {word} against {cur})")
+st.info(f"Since {daily.index[0]:%d %b %Y}, " + "; ".join(parts) + ".", icon="💡")
+
 # ---------- Plot ----------
 fig = go.Figure()
 for cur in currencies:
@@ -73,6 +85,7 @@ st.plotly_chart(fig, theme=None)
 with st.expander("Data table"):
     st.dataframe(rates.round(4).sort_index(ascending=False)
                  .rename_axis("Week (Sunday)" if resolution == "Weekly" else "Date"))
+    csv_download(rates, f"exchange_rates_{resolution.lower()}_{start_year}_{end_year}.csv")
 
 with st.expander("About the data"):
     st.markdown(

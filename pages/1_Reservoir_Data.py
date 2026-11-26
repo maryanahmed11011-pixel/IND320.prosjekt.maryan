@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import theme  # noqa: F401  shared palette and Plotly template
+from insights import csv_download, reservoir_status, seasonal_figure, status_sentence
 from utils import AREA_TYPES, MEASURE_COLS, UNITS, area_label, load_data
 
 # Columns stored as a share (0-1) are shown in percent in the plot
@@ -38,7 +39,23 @@ except Exception as err:  # NVE API down or no connection
              f"try again later.\n\nDetails: {err}")
     st.stop()
 
-tab_table, tab_plot = st.tabs(["📋 Overview table", "📈 Plot"])
+tab_normal, tab_table, tab_plot = st.tabs(
+    ["📅 This year vs normal", "📋 Overview table", "📈 Plot"])
+
+# ---------- Tab 0: one area compared with its own history ----------
+with tab_normal:
+    numbers = sorted(all_data["area_number"].unique())
+    labels = [area_label(area_type, n) for n in numbers]
+    one = st.selectbox("Area", labels,
+                       index=labels.index(area) if area in labels else 0,
+                       key="normal_area")
+    area_df = all_data[all_data["area_number"] == numbers[labels.index(one)]]
+    st.info(status_sentence(one, reservoir_status(area_df)), icon="💡")
+    st.plotly_chart(seasonal_figure(area_df, one), theme=None)
+    st.caption("The light band is the lowest and highest filling for each "
+               "week in earlier years, the dashed line the normal (median). "
+               "pp = percentage points.")
+
 
 # ---------- Tab 1: one row per area with a mini chart ----------
 with tab_table:
@@ -84,6 +101,8 @@ with tab_table:
         },
         hide_index=True,
     )
+    csv_download(all_data.drop(columns="month").set_index("date"),
+                 f"reservoirs_{area_type}.csv", "Download all data (CSV)")
     # Also show the first rows of the raw data, with dates without time
     with st.expander("Raw data (first rows)"):
         st.dataframe(
@@ -138,5 +157,8 @@ with tab_plot:
     )
     st.plotly_chart(fig, theme=None)
     st.caption("The thick line is the area chosen in the sidebar.")
+    csv_download(subset.drop(columns="month").set_index("date"),
+                 f"reservoirs_{area_type}_{start_month}_{end_month}.csv",
+                 "Download the plotted period (CSV)")
 
 st.caption("Source: NVE Magasinstatistikk API (fetched live, cached for one hour).")

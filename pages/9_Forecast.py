@@ -13,6 +13,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from analysis import FORECAST_DEFAULTS, seasonal_naive
+from insights import csv_download, weekly_normal
 from theme import COLORS
 from utils import (AREAS, NVE, cached_forecast, load_data, load_exchange_rates_weekly,
                    load_or_stop, load_weather_weekly_years)
@@ -149,6 +150,21 @@ else:
     k3.metric("Mean error (MAE)", "–", help="The forecast lies in the future.")
     k4.metric("Baseline in " f"{horizon} weeks", f"{baseline.iloc[-1]:.1f} %")
 
+# The conclusion in one sentence
+last_week = forecast.index[-1]
+area_rows = fill[fill["area_number"] == number]
+normal = weekly_normal(area_rows, last_week.year)["median"].get(
+    last_week.isocalendar().week)
+text = (f"The model expects **{area}** to "
+        f"{'fall' if forecast.iloc[-1] < y.loc[end] else 'rise'} from "
+        f"**{y.loc[end]:.1f} %** to **{forecast.iloc[-1]:.1f} %** by week "
+        f"{last_week.isocalendar().week}, {last_week.year}")
+if normal is not None and pd.notna(normal):
+    text += f" (normal for that week: {normal:.1f} %)"
+if pd.notna(actual.iloc[-1]):
+    text += f". The real value was **{actual.iloc[-1]:.1f} %**"
+st.info(text + ".", icon="💡")
+
 # ---------- Animated plot: the forecast is drawn one week at a time ----------
 # The forecast line starts at the last known week, so it joins the history
 fc_x = [end] + list(forecast.index)
@@ -201,6 +217,9 @@ with st.expander("Forecast table"):
     st.dataframe(pd.DataFrame({"Forecast (%)": forecast, "Actual (%)": actual,
                                "Baseline (%)": baseline}).round(1)
                  .rename_axis("Week (Sunday)"))
+    csv_download(pd.DataFrame({"forecast": forecast, "actual": actual,
+                               "baseline": baseline}).rename_axis("week"),
+                 f"forecast_{area}_{end:%Y-%m-%d}.csv")
 
 with st.expander("About the model"):
     st.markdown(

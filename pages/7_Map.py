@@ -19,9 +19,11 @@ import copy
 import branca.colormap as cm
 import folium
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 from streamlit_folium import st_folium
 
+from insights import csv_download, reservoir_status, status_sentence
 from theme import COLORS
 from utils import (AREAS, NVE, area_label, load_data, load_geojson,
                    load_or_stop, load_weather_weekly)
@@ -114,14 +116,20 @@ if mode in ("price", "water"):
     values = {area_label(area_type, n): v * 100 for n, v in
               zip(this_week["area_number"], this_week["filling_degree"])}
     title, unit, vmin, vmax = "Filling degree", "%", 0, 100
+    # All weeks of the chosen year (for the animation and the download)
+    in_year = filling[filling["date"].dt.year == year]
+    year_table = (in_year.pivot_table(index="date", columns="area_number",
+                                      values="filling_degree") * 100)
+    year_table.columns = [area_label(area_type, n) for n in year_table.columns]
     colormap = cm.LinearColormap(
         ["#f7fbff", "#9ecae1", "#3182bd", "#08306b"], vmin=vmin, vmax=vmax)
 else:
     title, unit, vmin, vmax = WEATHER[var]
-    values = {}
+    values, columns = {}, {}
     try:
         for region in regions:
             weekly = load_weather_weekly(region, week.year)
+            columns[region] = weekly[var]
             if week in weekly.index:
                 values[region] = weekly.loc[week, var]
     except Exception as err:  # e.g. rate limit (HTTP 429) from open-meteo
@@ -136,6 +144,7 @@ else:
     else:
         colormap = cm.LinearColormap(["#f7fbff", "#6baed6", "#08306b"],
                                      vmin=vmin, vmax=vmax)
+    year_table = pd.DataFrame(columns).reindex(year_weeks)
 colormap.caption = f"{title} ({unit})"
 no_data = all(pd.isna(values.get(r)) for r in regions)
 
@@ -265,6 +274,11 @@ with right:
     # above the map moves it on the page, and then Streamlit draws it again
     if no_data:
         st.info("No data for the chosen week. Try another week.")
+    elif mode in ("price", "water") and selected in regions:
+        # The conclusion for the selected area and week in one sentence
+        rows = filling[filling["area_number"] == int(selected[-1])]
+        st.info(status_sentence(selected, reservoir_status(rows, upto=week)),
+                icon="💡")
     if selected in values and pd.notna(values[selected]):
         st.metric(f"{title}, week {week.isocalendar().week} {week.year}",
                   f"{values[selected]:.1f} {unit}")
@@ -279,6 +293,57 @@ with right:
                  icon="🌦️")
     st.page_link("pages/5_Reservoir_Analysis.py", label="Reservoir analysis",
                  icon="🔍")
+
+# ---------- Animation: the whole year, one week per frame ----------
+# Drawn with Plotly in the browser, so playing it does not rerun the app
+with st.expander(f"▶ Play {year} week by week"):
+    table = year_table.reindex(columns=regions).sort_index()
+    if table.dropna(how="all").empty:
+        st.info("No data for this year.")
+    else:
+        scale = [[i / 10, colormap(vmin + (vmax - vmin) * i / 10)]
+                 for i in range(11)]
+        labels = [f"Week {d.isocalendar().week}" for d in table.index]
+
+        def week_trace(i):
+            row = table.iloc[i]
+            return go.Choropleth(
+                geojson=geojson, locations=regions,
+                featureidkey="properties.region", z=row.values,
+                zmin=vmin, zmax=vmax, colorscale=scale, marker_opacity=0.8,
+                marker_line=dict(color=COLORS["dark"], width=1),
+                colorbar=dict(title=unit, len=0.8),
+                customdata=[f"{v:.1f} {unit}" if pd.notna(v) else "no data"
+                            for v in row.values],
+                hovertemplate="%{location}: %{customdata}<extra></extra>")
+
+        anim = go.Figure(week_trace(0))
+        anim.frames = [go.Frame(data=[week_trace(i)], name=labels[i])
+                       for i in range(len(table))]
+        anim.update_geos(fitbounds="locations", visible=False)
+        anim.update_layout(
+            height=560, margin=dict(l=0, r=0, t=40, b=0),
+            title=f"{title}, {year}",
+            updatemenus=[dict(type="buttons", x=0, y=0, xanchor="left",
+                              yanchor="top", direction="right", buttons=[
+                dict(label="▶ Play", method="animate",
+                     args=[None, dict(frame=dict(duration=350, redraw=True),
+                                      transition=dict(duration=0),
+                                      fromcurrent=True)]),
+                dict(label="❚❚ Pause", method="animate",
+                     args=[[None], dict(frame=dict(duration=0, redraw=False),
+                                        mode="immediate")])])],
+            sliders=[dict(x=0.2, len=0.8, y=0, currentvalue=dict(prefix=""),
+                          steps=[dict(label=lab, method="animate",
+                                      args=[[lab], dict(mode="immediate",
+                                            frame=dict(duration=0, redraw=True))])
+                                 for lab in labels])],
+        )
+        st.plotly_chart(anim, theme=None)
+        st.caption("Press Play to see the areas fill up with snowmelt in "
+                   "spring and summer and empty through the winter.")
+    csv_download(year_table.round(2).rename_axis("week"),
+                 f"map_{mode}_{year}.csv", f"Download {year} (CSV)")
 
 with st.expander("About the map"):
     st.markdown(

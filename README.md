@@ -1,4 +1,4 @@
-# IND320 – Norway's Water Battery
+# IND320 – Hydropower Reservoirs in Norway
 
 Streamlit app and Jupyter Notebooks for the IND320 project work (NMBU,
 autumn 2026). The app combines weekly reservoir statistics from NVE,

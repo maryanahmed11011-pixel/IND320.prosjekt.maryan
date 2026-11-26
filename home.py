@@ -1,15 +1,15 @@
 """Front page: key figures, seasonal overview and shortcuts to all pages."""
-import plotly.graph_objects as go
 import streamlit as st
 
-from theme import COLORS  # shared palette (also registers the Plotly template)
+import theme  # noqa: F401  shared palette, registers the Plotly template
+from insights import reservoir_status, seasonal_figure, status_sentence
 from utils import NVE, load_data, load_or_stop  # shared, cached data loading
 
 # National total from the NVE API (a readable error message if it is down)
 df = load_or_stop(NVE, load_data, "NO")
 
 # ---------- Top section ----------
-st.title("💧 Norway's Water Battery")
+st.title("Hydropower Reservoirs in Norway")
 st.markdown(
     "Around 90 % of Norway's electricity comes from hydropower. The water stored in the "
     "reservoirs works like a giant **battery**: it fills up with snowmelt in spring and summer, "
@@ -21,69 +21,49 @@ st.caption("IND320 – Compulsory work 4 · Data: NVE Magasinstatistikk API, "
            "open-meteo (ERA5) and ENTSO-E (via MongoDB)")
 
 # ---------- Key figures for the latest week ----------
+status = reservoir_status(df)
+year, week = status["year"], status["week"]
 latest = df.iloc[-1]  # data is sorted by date, so the last row is the newest week
-year, week = int(latest["iso_year"]), int(latest["iso_week"])
 
-# Same week last year, and historical median for this week (all earlier years)
-last_year = df[(df["iso_year"] == year - 1) & (df["iso_week"] == week)]
-history = df[df["iso_year"] < year]
-median_by_week = history.groupby("iso_week")["filling_degree"].median()
+# The conclusion in one plain sentence, so the numbers do not need reading
+st.info(status_sentence("Norway", status), icon="💡")
 
 st.subheader(f"📍 Status week {week}, {year}")
 c1, c2, c3, c4 = st.columns(4)
-c1.metric(
-    "Filling degree",
-    f"{latest['filling_degree'] * 100:.1f} %",
-    f"{latest['filling_degree_change'] * 100:+.1f} pp since last week",
-)
-c2.metric(
-    f"Stored energy (capacity {latest['capacity_TWh']:.1f} TWh)",
-    f"{latest['filling_TWh']:.1f} TWh",
-)
-if not last_year.empty:
-    diff = (latest["filling_degree"] - last_year["filling_degree"].iloc[0]) * 100
-    c3.metric("vs. same week last year", f"{diff:+.1f} pp",
-              help="pp = percentage points")
-if week in median_by_week.index:
-    diff = (latest["filling_degree"] - median_by_week[week]) * 100
-    c4.metric("vs. normal (median since 1995)", f"{diff:+.1f} pp",
-              help="pp = percentage points")
+c1.metric("Filling degree", f"{status['value']:.1f} %",
+          f"{status['week_change']:+.1f} pp since last week",
+          help="pp = percentage points")
+c2.metric(f"Stored energy (capacity {latest['capacity_TWh']:.1f} TWh)",
+          f"{latest['filling_TWh']:.1f} TWh")
+if status["vs_last_year"] is not None:
+    c3.metric("Same week last year",
+              f"{status['value'] - status['vs_last_year']:.1f} %",
+              f"{status['vs_last_year']:+.1f} pp now",
+              help="The arrow shows how much higher or lower the filling is "
+                   "now than in the same week last year.")
+if status["vs_normal"] is not None:
+    c4.metric(f"Normal for week {week}", f"{status['normal']:.1f} %",
+              f"{status['vs_normal']:+.1f} pp now",
+              help=f"Median for the same week in {status['normal_period']}.")
+
+# ---------- The five price areas side by side ----------
+st.markdown("**Price areas compared with normal for this week**")
+el = load_or_stop(NVE, load_data, "EL")
+for col, (number, area_df) in zip(st.columns(5), el.groupby("area_number")):
+    s = reservoir_status(area_df)
+    if s:
+        col.metric(f"NO{number}", f"{s['value']:.1f} %",
+                   None if s["vs_normal"] is None
+                   else f"{s['vs_normal']:+.1f} pp vs normal",
+                   help=f"Normal = median for week {s['week']} in "
+                        f"{s['normal_period']}.")
 
 # ---------- Seasonal plot: this year vs. history ----------
 st.subheader("🌊 This year compared to history")
-
-# Min, max and median for each week number over all earlier years
-band = history.groupby("iso_week")["filling_degree"].agg(["min", "median", "max"]) * 100
-this_year = df[df["iso_year"] == year]
-prev_year = df[df["iso_year"] == year - 1]
-
-fig = go.Figure()
-# Historical range as a filled band: the max line is filled down to the
-# min line ("tonexty"), so the band shows min-max for each week
-fig.add_scatter(x=band.index, y=band["min"], mode="lines",
-                line=dict(width=0), showlegend=False, hoverinfo="skip")
-fig.add_scatter(x=band.index, y=band["max"], mode="lines",
-                line=dict(width=0), fill="tonexty",
-                fillcolor="rgba(158, 202, 225, 0.5)",  # COLORS["light"]
-                name=f"Range {int(history['iso_year'].min())}–{year - 1}",
-                hoverinfo="skip")
-fig.add_scatter(x=band.index, y=band["median"], mode="lines", name="Median",
-                line=dict(color=COLORS["primary"], dash="dash"),
-                hovertemplate="%{y:.1f} %")
-fig.add_scatter(x=prev_year["iso_week"], y=prev_year["filling_degree"] * 100,
-                mode="lines", name=str(year - 1),
-                line=dict(color=COLORS["neutral"]),
-                hovertemplate="%{y:.1f} %")
-fig.add_scatter(x=this_year["iso_week"], y=this_year["filling_degree"] * 100,
-                mode="lines+markers", name=str(year),
-                line=dict(color=COLORS["dark"], width=3),
-                marker=dict(size=5), hovertemplate="%{y:.1f} %")
-fig.update_layout(xaxis=dict(title="Week number", range=[1, 53]),
-                  yaxis=dict(title="Filling degree (%)", range=[0, 100]),
-                  height=400, hovermode="x unified")
-st.plotly_chart(fig, theme=None)
+st.plotly_chart(seasonal_figure(df, "Norway"), theme=None)
 st.caption("The reservoirs are lowest around week 15–18 (April) and highest "
-           "around week 40 (October).")
+           "around week 40 (October). The band shows the lowest and highest "
+           "filling for each week in earlier years.")
 
 # ---------- Records ----------
 st.subheader("🏆 Records since 1995")
